@@ -130,9 +130,37 @@ class GL:
         print("TriangleSet2D : vertices = {0}".format(vertices)) # imprime no terminal
         print("TriangleSet2D : colors = {0}".format(colors)) # imprime no terminal as cores
 
-        # Exemplo:
-        gpu.GPU.draw_pixel([6, 8], gpu.GPU.RGB8, [255, 255, 0])  # altera pixel (u, v, tipo, r, g, b)
+        color = list(map(lambda x : round(x * 255), colors['emissiveColor']))
 
+        def is_inside(vertices, point):
+            x0, y0, x1, y1, x2, y2 = vertices
+
+            cross_product = (x1 - x0) * (y2 - y0) - (y1 - y0) * (x2 - x0)
+
+            if cross_product < 0:
+                vertices = [x0, y0, x2, y2, x1, y1]
+                x0, y0, x1, y1, x2, y2 = vertices
+
+            def sign(x0, y0, x1, y1, px, py):
+                return (x1 - x0) * (py - y0) - (y1 - y0) * (px - x0)
+
+            b1 = sign(x0, y0, x1, y1, point[0], point[1]) < 0.0
+            b2 = sign(x1, y1, x2, y2, point[0], point[1]) < 0.0
+            b3 = sign(x2, y2, x0, y0, point[0], point[1]) < 0.0
+
+            return (b1 == b2) and (b2 == b3)
+        
+        x0, y0, x1, y1, x2, y2 = vertices
+        min_x = int(min(x0, x1, x2))
+        min_y = int(min(y0, y1, y2))
+        max_x = int(max(x0, x1, x2))
+        max_y = int(max(y0, y1, y2))
+
+        for x in range(min_x, max_x+1):
+            for y in range(min_y, max_y+1):
+                point = [x, y]
+                if is_inside(vertices, point):
+                    gpu.GPU.draw_pixel(point, gpu.GPU.RGB8, color)
 
     @staticmethod
     def triangleSet(point, colors):
