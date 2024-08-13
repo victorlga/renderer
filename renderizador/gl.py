@@ -34,133 +34,146 @@ class GL:
 
     @staticmethod
     def polypoint2D(point, colors):
-        """Função usada para renderizar Polypoint2D."""
-        # Nessa função você receberá pontos no parâmetro point, esses pontos são uma lista
-        # de pontos x, y sempre na ordem. Assim point[0] é o valor da coordenada x do
-        # primeiro ponto, point[1] o valor y do primeiro ponto. Já point[2] é a
-        # coordenada x do segundo ponto e assim por diante. Assuma a quantidade de pontos
-        # pelo tamanho da lista e assuma que sempre vira uma quantidade par de valores.
-        # O parâmetro colors é um dicionário com os tipos cores possíveis, para o Polypoint2D
-        # você pode assumir inicialmente o desenho dos pontos com a cor emissiva (emissiveColor).
-
+        """
+        Renderiza pontos 2D na tela.
+        
+        Parâmetros:
+        - point: Lista de coordenadas (x, y) dos pontos a serem desenhados.
+        - colors: Dicionário com os tipos de cores disponíveis. Utiliza a cor emissiva (emissiveColor) para desenhar.
+        """
         # O print abaixo é só para vocês verificarem o funcionamento, DEVE SER REMOVIDO.
         print("Polypoint2D : pontos = {0}".format(point)) # imprime no terminal pontos
         print("Polypoint2D : colors = {0}".format(colors)) # imprime no terminal as cores
 
         i = 0
-        color = list(map(lambda x : round(x * 255), colors['emissiveColor']))
+        color = list(map(lambda x: round(x * 255), colors['emissiveColor']))  # Convertendo a cor para valores entre 0 e 255
         while i < len(point):
-            gpu.GPU.draw_pixel([int(point[i]), int(point[i+1])], gpu.GPU.RGB8, color)
+            gpu.GPU.draw_pixel([int(point[i]), int(point[i+1])], gpu.GPU.RGB8, color)  # Desenhando cada ponto
             i += 2
 
     @staticmethod
     def polyline2D(lineSegments, colors):
-        """Função usada para renderizar Polyline2D."""
-        # Nessa função você receberá os pontos de uma linha no parâmetro lineSegments, esses
-        # pontos são uma lista de pontos x, y sempre na ordem. Assim point[0] é o valor da
-        # coordenada x do primeiro ponto, point[1] o valor y do primeiro ponto. Já point[2] é
-        # a coordenada x do segundo ponto e assim por diante. Assuma a quantidade de pontos
-        # pelo tamanho da lista. A quantidade mínima de pontos são 2 (4 valores), porém a
-        # função pode receber mais pontos para desenhar vários segmentos. Assuma que sempre
-        # vira uma quantidade par de valores.
-        # O parâmetro colors é um dicionário com os tipos cores possíveis, para o Polyline2D
-        # você pode assumir inicialmente o desenho das linhas com a cor emissiva (emissiveColor).
-
+        """
+        Renderiza linhas 2D na tela.
+        
+        Parâmetros:
+        - lineSegments: Lista de coordenadas (x, y) dos pontos que formam os segmentos de linha.
+        - colors: Dicionário com os tipos de cores disponíveis. Utiliza a cor emissiva (emissiveColor) para desenhar.
+        """
         print("Polyline2D : lineSegments = {0}".format(lineSegments)) # imprime no terminal
         print("Polyline2D : colors = {0}".format(colors)) # imprime no terminal as cores
         
-        x0, y0, x1, y1 = map(int, lineSegments)
-        color = list(map(lambda x : round(x * 255), colors['emissiveColor']))
+        x0, y0, x1, y1 = map(int, lineSegments)  # Convertendo as coordenadas para inteiros
+        color = list(map(lambda x: round(x * 255), colors['emissiveColor']))  # Convertendo a cor para valores entre 0 e 255
 
         if y0 == y1:
+            # Caso especial de linha horizontal
             for u in range(x0, x1+1):
-                gpu.GPU.draw_pixel([u, y0], gpu.GPU.RGB8, color)
+                gpu.GPU.draw_pixel([u, y0], gpu.GPU.RGB8, color)  # Desenha a linha horizontal
             return
     
         if y0 > y1:
+            # Se y0 > y1, inverta os pontos para garantir que y0 esteja sempre abaixo de y1
             y0, y1 = y1, y0
             x0, x1 = x1, x0
 
-        
-        s = (x1 - x0)/(y1 - y0)
+        s = (x1 - x0) / (y1 - y0)  # Calcula a inclinação da linha
 
         if abs(s) < 1:
+            # Se a inclinação for menor que 1, iteramos sobre y e calculamos x
             u = x0
             for v in range(y0, y1+1):
-                gpu.GPU.draw_pixel([round(u), v], gpu.GPU.RGB8, color)
+                gpu.GPU.draw_pixel([round(u), v], gpu.GPU.RGB8, color)  # Desenha o ponto calculado
                 u += s
             return
 
+        # Caso contrário, iteramos sobre x e calculamos y
         y0, y1 = y1, y0
         x0, x1 = x1, x0
     
-        s **= -1
+        s **= -1  # Inverte a inclinação para a iteração em x
         v = y0
         for u in range(x0, x1+1):
-            gpu.GPU.draw_pixel([u, round(v)], gpu.GPU.RGB8, color)
+            gpu.GPU.draw_pixel([u, round(v)], gpu.GPU.RGB8, color)  # Desenha o ponto calculado
             v += s
 
     @staticmethod
     def circle2D(radius, colors):
-        """Função usada para renderizar Circle2D."""
-        # Nessa função você receberá um valor de raio e deverá desenhar o contorno de
-        # um círculo.
-        # O parâmetro colors é um dicionário com os tipos cores possíveis, para o Circle2D
-        # você pode assumir o desenho das linhas com a cor emissiva (emissiveColor).
-
+        """
+        Renderiza o contorno de um círculo 2D na tela.
+        
+        Parâmetros:
+        - radius: Raio do círculo.
+        - colors: Dicionário com os tipos de cores disponíveis. Utiliza a cor emissiva (emissiveColor) para desenhar.
+        """
         print("Circle2D : radius = {0}".format(radius)) # imprime no terminal
         print("Circle2D : colors = {0}".format(colors)) # imprime no terminal as cores
         
-        color = list(map(lambda x : round(x * 255), colors['emissiveColor']))
+        color = list(map(lambda x: round(x * 255), colors['emissiveColor']))  # Convertendo a cor para valores entre 0 e 255
         for i in np.arange(0, 2 * math.pi, 0.01):
-            point = [int(math.cos(i) * radius), int(math.sin(i) * radius)]
-            if 0 <= point[0] and point[0] <= 30 and 0 <= point[1] and point[1] <= 20:
-                gpu.GPU.draw_pixel(point, gpu.GPU.RGB8, color)
+            point = [int(math.cos(i) * radius), int(math.sin(i) * radius)]  # Calcula a posição do ponto na circunferência
+            if 0 <= point[0] <= GL.width and 0 <= point[1] <= GL.height:
+                gpu.GPU.draw_pixel(point, gpu.GPU.RGB8, color)  # Desenha o ponto na tela
 
     @staticmethod
     def triangleSet2D(vertices, colors):
-        """Função usada para renderizar TriangleSet2D."""
-        # Nessa função você receberá os vertices de um triângulo no parâmetro vertices,
-        # esses pontos são uma lista de pontos x, y sempre na ordem. Assim point[0] é o
-        # valor da coordenada x do primeiro ponto, point[1] o valor y do primeiro ponto.
-        # Já point[2] é a coordenada x do segundo ponto e assim por diante. Assuma que a
-        # quantidade de pontos é sempre multiplo de 3, ou seja, 6 valores ou 12 valores, etc.
-        # O parâmetro colors é um dicionário com os tipos cores possíveis, para o TriangleSet2D
-        # você pode assumir inicialmente o desenho das linhas com a cor emissiva (emissiveColor).
+        """
+        Renderiza um triângulo 2D na tela.
+        
+        Parâmetros:
+        - vertices: Lista de coordenadas (x, y) dos três vértices do triângulo.
+        - colors: Dicionário com os tipos de cores disponíveis. Utiliza a cor emissiva (emissiveColor) para desenhar.
+        """
         print("TriangleSet2D : vertices = {0}".format(vertices)) # imprime no terminal
         print("TriangleSet2D : colors = {0}".format(colors)) # imprime no terminal as cores
 
-        color = list(map(lambda x : round(x * 255), colors['emissiveColor']))
+        color = list(map(lambda x: round(x * 255), colors['emissiveColor']))  # Convertendo a cor para valores entre 0 e 255
 
         def is_inside(vertices, point):
+            """
+            Função auxiliar para verificar se um ponto está dentro de um triângulo.
+            
+            Parâmetros:
+            - vertices: Lista de coordenadas (x, y) dos três vértices do triângulo.
+            - point: Coordenadas (x, y) do ponto a ser verificado.
+            
+            Retorna:
+            - True se o ponto estiver dentro do triângulo, False caso contrário.
+            """
             x0, y0, x1, y1, x2, y2 = vertices
 
+            # Calcula o produto vetorial para determinar a orientação dos vértices
             cross_product = (x1 - x0) * (y2 - y0) - (y1 - y0) * (x2 - x0)
 
             if cross_product < 0:
+                # Se os vértices estiverem em ordem horária, inverter para anti-horária
                 vertices = [x0, y0, x2, y2, x1, y1]
                 x0, y0, x1, y1, x2, y2 = vertices
 
             def sign(x0, y0, x1, y1, px, py):
+                """Calcula o sinal do produto vetorial para determinar a posição do ponto em relação à aresta."""
                 return (x1 - x0) * (py - y0) - (y1 - y0) * (px - x0)
 
+            # Verifica se o ponto está do mesmo lado de todas as arestas do triângulo
             b1 = sign(x0, y0, x1, y1, point[0], point[1]) < 0.0
             b2 = sign(x1, y1, x2, y2, point[0], point[1]) < 0.0
             b3 = sign(x2, y2, x0, y0, point[0], point[1]) < 0.0
 
             return (b1 == b2) and (b2 == b3)
         
+        # Calcula o bounding box do triângulo
         x0, y0, x1, y1, x2, y2 = vertices
         min_x = int(min(x0, x1, x2))
         min_y = int(min(y0, y1, y2))
         max_x = int(max(x0, x1, x2))
         max_y = int(max(y0, y1, y2))
 
+        # Itera apenas dentro do bounding box
         for x in range(min_x, max_x+1):
             for y in range(min_y, max_y+1):
                 point = [x, y]
                 if is_inside(vertices, point):
-                    gpu.GPU.draw_pixel(point, gpu.GPU.RGB8, color)
+                    gpu.GPU.draw_pixel(point, gpu.GPU.RGB8, color)  # Desenha o ponto se estiver dentro do triângulo
 
     @staticmethod
     def triangleSet(point, colors):
