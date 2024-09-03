@@ -106,14 +106,27 @@ class GL:
         - radius: Raio do círculo.
         - colors: Dicionário com os tipos de cores disponíveis. Utiliza a cor emissiva (emissiveColor) para desenhar.
         """
-        print("Circle2D : radius = {0}".format(radius)) # imprime no terminal
-        print("Circle2D : colors = {0}".format(colors)) # imprime no terminal as cores
         
-        color = list(map(lambda x: round(x * 255), colors['emissiveColor']))  # Convertendo a cor para valores entre 0 e 255
-        for i in np.arange(0, 2 * math.pi, 0.01):
-            point = [int(math.cos(i) * radius), int(math.sin(i) * radius)]  # Calcula a posição do ponto na circunferência
-            if 0 <= point[0] <= GL.width and 0 <= point[1] <= GL.height:
-                gpu.GPU.draw_pixel(point, gpu.GPU.RGB8, color)  # Desenha o ponto na tela
+        # Convertendo a cor para valores entre 0 e 255
+        color = (np.array(colors['emissiveColor']) * 255).astype(int)
+
+        # Cria um array de ângulos de 0 a 2*pi
+        angles = np.linspace(0, 2 * np.pi, num=360, endpoint=False)
+
+        # Calcula as coordenadas x e y dos pontos na circunferência
+        x_points = np.round(np.cos(angles) * radius).astype(int)
+        y_points = np.round(np.sin(angles) * radius).astype(int)
+
+        # Combina as coordenadas em pares de pontos
+        points = np.vstack((x_points, y_points)).T
+
+        # Filtra os pontos para garantir que estão dentro do framebuffer
+        valid_points = points[(points[:, 0] >= 0) & (points[:, 0] < GL.width) & 
+                            (points[:, 1] >= 0) & (points[:, 1] < GL.height)]
+
+        # Desenha cada ponto na tela
+        for point in valid_points:
+            gpu.GPU.draw_pixel(point.tolist(), gpu.GPU.RGB8, color.tolist())
 
     @staticmethod
     def triangleSet2D(vertices, colors):
@@ -124,56 +137,44 @@ class GL:
         - vertices: Lista de coordenadas (x, y) dos três vértices do triângulo.
         - colors: Dicionário com os tipos de cores disponíveis. Utiliza a cor emissiva (emissiveColor) para desenhar.
         """
-        print("TriangleSet2D : vertices = {0}".format(vertices)) # imprime no terminal
-        print("TriangleSet2D : colors = {0}".format(colors)) # imprime no terminal as cores
+        if isinstance(colors, dict):
+            colors = np.array(colors['emissiveColor']) * 255  # Convertendo a cor para valores entre 0 e 255
+            colors = colors.astype(int)
 
-        color = list(map(lambda x: round(x * 255), colors['emissiveColor']))  # Convertendo a cor para valores entre 0 e 255
-
-        def is_inside(vertices, point):
-            """
-            Função auxiliar para verificar se um ponto está dentro de um triângulo.
-            
-            Parâmetros:
-            - vertices: Lista de coordenadas (x, y) dos três vértices do triângulo.
-            - point: Coordenadas (x, y) do ponto a ser verificado.
-            
-            Retorna:
-            - True se o ponto estiver dentro do triângulo, False caso contrário.
-            """
-            x0, y0, x1, y1, x2, y2 = vertices
-
-            # Calcula o produto vetorial para determinar a orientação dos vértices
-            cross_product = (x1 - x0) * (y2 - y0) - (y1 - y0) * (x2 - x0)
-
-            if cross_product < 0:
-                # Se os vértices estiverem em ordem horária, inverter para anti-horária
-                vertices = [x0, y0, x2, y2, x1, y1]
-                x0, y0, x1, y1, x2, y2 = vertices
-
-            def sign(x0, y0, x1, y1, px, py):
-                """Calcula o sinal do produto vetorial para determinar a posição do ponto em relação à aresta."""
-                return (x1 - x0) * (py - y0) - (y1 - y0) * (px - x0)
-
-            # Verifica se o ponto está do mesmo lado de todas as arestas do triângulo
-            b1 = sign(x0, y0, x1, y1, point[0], point[1]) < 0.0
-            b2 = sign(x1, y1, x2, y2, point[0], point[1]) < 0.0
-            b3 = sign(x2, y2, x0, y0, point[0], point[1]) < 0.0
-
-            return (b1 == b2) and (b2 == b3)
+        vertices = np.array(vertices).reshape(3, 2)
         
-        # Calcula o bounding box do triângulo
-        x0, y0, x1, y1, x2, y2 = vertices
-        min_x = int(min(x0, x1, x2))
-        min_y = int(min(y0, y1, y2))
-        max_x = int(max(x0, x1, x2))
-        max_y = int(max(y0, y1, y2))
+        def is_inside(vertices, point):
+            # Utiliza numpy para cálculos vetorizados do produto vetorial
+            x0, y0, x1, y1, x2, y2 = vertices.flatten()
 
-        # Itera apenas dentro do bounding box
-        for x in range(min_x, max_x+1):
-            for y in range(min_y, max_y+1):
-                point = [x, y]
-                if is_inside(vertices, point):
-                    gpu.GPU.draw_pixel(point, gpu.GPU.RGB8, color)  # Desenha o ponto se estiver dentro do triângulo
+            v0 = np.array([x2 - x0, y2 - y0])
+            v1 = np.array([x1 - x0, y1 - y0])
+            v2 = np.array(point) - np.array([x0, y0])
+
+            dot00 = np.dot(v0, v0)
+            dot01 = np.dot(v0, v1)
+            dot02 = np.dot(v0, v2)
+            dot11 = np.dot(v1, v1)
+            dot12 = np.dot(v1, v2)
+
+            # Calcula o determinante e verifica se o ponto está dentro do triângulo
+            invDenom = 1 / (dot00 * dot11 - dot01 * dot01)
+            u = (dot11 * dot02 - dot01 * dot12) * invDenom
+            v = (dot00 * dot12 - dot01 * dot02) * invDenom
+
+            return (u >= 0) & (v >= 0) & (u + v <= 1)
+
+        # Calcula o bounding box do triângulo
+        min_x, min_y = np.min(vertices, axis=0).astype(int)
+        max_x, max_y = np.max(vertices, axis=0).astype(int)
+
+        # Itera dentro do bounding box
+        for x in range(min_x, max_x + 1):
+            for y in range(min_y, max_y + 1):
+                if 0 <= x < GL.width and 0 <= y < GL.height:
+                    if is_inside(vertices.flatten(), [x, y]):
+                        gpu.GPU.draw_pixel([x, y], gpu.GPU.RGB8, colors.tolist())  # Desenha o ponto se estiver dentro do triângulo
+
 
     @staticmethod
     def triangleSet(point, colors):
@@ -191,12 +192,26 @@ class GL:
         # (emissiveColor), conforme implementar novos materias você deverá suportar outros
         # tipos de cores.
 
-        # O print abaixo é só para vocês verificarem o funcionamento, DEVE SER REMOVIDO.
-        print("TriangleSet : pontos = {0}".format(point)) # imprime no terminal pontos
-        print("TriangleSet : colors = {0}".format(colors)) # imprime no terminal as cores
+        def projection(point, perspective=False):
+            if perspective:
 
-        # Exemplo de desenho de um pixel branco na coordenada 10, 10
-        gpu.GPU.draw_pixel([10, 10], gpu.GPU.RGB8, [255, 255, 255])  # altera pixel
+                return x_2D, y_2D
+            return point[0], point[1]
+        
+        colors = np.array(colors['emissiveColor']) * 255  # Convertendo a cor para valores entre 0 e 255
+        colors = colors.astype(int)
+
+        num_points = len(point) // 3  # Cada ponto tem 3 coordenadas (x, y, z)
+        points = np.array(point).reshape(num_points, 3)
+
+        for i in np.arange(0, len(points), 3):
+            p1, p2, p3 = points[i], points[i+1], points[i+2]
+            
+            p1_2D = projection(p1, perspective=True)
+            p2_2D = projection(p2, perspective=True)
+            p3_2D = projection(p3, perspective=True)
+
+            GL.triangleSet2D(p1_2D + p2_2D + p3_2D, colors[i//3:i//3 + 3])
 
     @staticmethod
     def viewpoint(position, orientation, fieldOfView):
