@@ -31,6 +31,8 @@ class GL:
         GL.height = height
         GL.near = near
         GL.far = far
+        GL.perspective_matrix = None
+        GL.transformation_stack = []
 
     @staticmethod
     def polypoint2D(point, colors):
@@ -137,9 +139,8 @@ class GL:
         - vertices: Lista de coordenadas (x, y) dos três vértices do triângulo.
         - colors: Dicionário com os tipos de cores disponíveis. Utiliza a cor emissiva (emissiveColor) para desenhar.
         """
-        if isinstance(colors, dict):
-            colors = np.array(colors['emissiveColor']) * 255  # Convertendo a cor para valores entre 0 e 255
-            colors = colors.astype(int)
+        colors = np.array(colors['emissiveColor']) * 255  # Convertendo a cor para valores entre 0 e 255
+        colors = colors.astype(int)
 
         vertices = np.array(vertices).reshape(3, 2)
         
@@ -175,7 +176,6 @@ class GL:
                     if is_inside(vertices.flatten(), [x, y]):
                         gpu.GPU.draw_pixel([x, y], gpu.GPU.RGB8, colors.tolist())  # Desenha o ponto se estiver dentro do triângulo
 
-
     @staticmethod
     def triangleSet(point, colors):
         """Função usada para renderizar TriangleSet."""
@@ -191,27 +191,64 @@ class GL:
         # inicialmente, para o TriangleSet, o desenho das linhas com a cor emissiva
         # (emissiveColor), conforme implementar novos materias você deverá suportar outros
         # tipos de cores.
-
-        def projection(point, perspective=False):
-            if perspective:
-
-                return x_2D, y_2D
-            return point[0], point[1]
         
         colors = np.array(colors['emissiveColor']) * 255  # Convertendo a cor para valores entre 0 e 255
         colors = colors.astype(int)
 
-        num_points = len(point) // 3  # Cada ponto tem 3 coordenadas (x, y, z)
+        def project_vertex(vertex):
+            """Aplica a matriz de projeção a um vértice e realiza a divisão homogênea."""
+            vertex_homogeneous = np.append(vertex, 1)  # Adiciona o w = 1
+            projected_vertex = GL.perspective_matrix @ GL.transformation_stack[-1] @ vertex_homogeneous
+
+            # Realiza a divisão homogênea
+            projected_vertex /= projected_vertex[3]
+            
+            # Converte as coordenadas para 2D (considerando a viewport)
+            x = (projected_vertex[0] + 1) * 0.5 * GL.width
+            y = (1 - (projected_vertex[1] + 1) * 0.5) * GL.height
+            
+            return [x, y]
+
+        num_points = len(point) // 3
         points = np.array(point).reshape(num_points, 3)
 
-        for i in np.arange(0, len(points), 3):
-            p1, p2, p3 = points[i], points[i+1], points[i+2]
-            
-            p1_2D = projection(p1, perspective=True)
-            p2_2D = projection(p2, perspective=True)
-            p3_2D = projection(p3, perspective=True)
+        for i in range(0, num_points, 3):
+            p1 = project_vertex(points[i])
+            p2 = project_vertex(points[i+1])
+            p3 = project_vertex(points[i+2])
+            vertices = np.array(p1+p2+p3).reshape(3, 2)
+        
+            def is_inside(vertices, point):
+                # Utiliza numpy para cálculos vetorizados do produto vetorial
+                x0, y0, x1, y1, x2, y2 = vertices.flatten()
 
-            GL.triangleSet2D(p1_2D + p2_2D + p3_2D, colors[i//3:i//3 + 3])
+                v0 = np.array([x2 - x0, y2 - y0])
+                v1 = np.array([x1 - x0, y1 - y0])
+                v2 = np.array(point) - np.array([x0, y0])
+
+                dot00 = np.dot(v0, v0)
+                dot01 = np.dot(v0, v1)
+                dot02 = np.dot(v0, v2)
+                dot11 = np.dot(v1, v1)
+                dot12 = np.dot(v1, v2)
+
+                # Calcula o determinante e verifica se o ponto está dentro do triângulo
+                invDenom = 1 / (dot00 * dot11 - dot01 * dot01)
+                u = (dot11 * dot02 - dot01 * dot12) * invDenom
+                v = (dot00 * dot12 - dot01 * dot02) * invDenom
+
+                return (u >= 0) & (v >= 0) & (u + v <= 1)
+
+            # Calcula o bounding box do triângulo
+            min_x, min_y = np.min(vertices, axis=0).astype(int)
+            max_x, max_y = np.max(vertices, axis=0).astype(int)
+
+            # Itera dentro do bounding box
+            for x in range(min_x, max_x + 1):
+                for y in range(min_y, max_y + 1):
+                    if 0 <= x < GL.width and 0 <= y < GL.height:
+                        if is_inside(vertices.flatten(), [x, y]):
+                            gpu.GPU.draw_pixel([x, y], gpu.GPU.RGB8, colors.tolist())
 
     @staticmethod
     def viewpoint(position, orientation, fieldOfView):
@@ -220,11 +257,43 @@ class GL:
         # câmera virtual. Use esses dados para poder calcular e criar a matriz de projeção
         # perspectiva para poder aplicar nos pontos dos objetos geométricos.
 
-        # O print abaixo é só para vocês verificarem o funcionamento, DEVE SER REMOVIDO.
-        print("Viewpoint : ", end='')
-        print("position = {0} ".format(position), end='')
-        print("orientation = {0} ".format(orientation), end='')
-        print("fieldOfView = {0} ".format(fieldOfView))
+        aspect_ratio = GL.width / GL.height
+        near = GL.near
+        far = GL.far
+
+        # Matriz de projeção perspectiva
+        top = near * np.tan(fieldOfView / 2)
+        right = top * aspect_ratio
+
+        perspective_matrix = np.array([
+            [near/right, 0, 0, 0],
+            [0, near/top, 0, 0],
+            [0, 0, -(far+near)/(far-near), -2*far*near/(far-near)],
+            [0, 0, -1, 0]
+        ])
+
+        # Matriz de rotação da câmera a partir de `orientation`
+        angle = orientation[3]
+        x, y, z = orientation[:3]
+        c, s = np.cos(angle), np.sin(angle)
+        rotation_matrix = np.linalg.inv(np.array([
+            [c + (1-c)*x*x, (1-c)*x*y - s*z, (1-c)*x*z + s*y, 0],
+            [(1-c)*y*x + s*z, c + (1-c)*y*y, (1-c)*y*z - s*x, 0],
+            [(1-c)*z*x - s*y, (1-c)*z*y + s*x, c + (1-c)*z*z, 0],
+            [0, 0, 0, 1]
+        ]))
+
+        # Matriz de translação da câmera a partir de `position`
+        translation_matrix = np.linalg.inv(np.array([
+            [1, 0, 0, position[0]],
+            [0, 1, 0, position[1]],
+            [0, 0, 1, position[2]],
+            [0, 0, 0, 1]
+        ]))
+
+        # Combinando as transformações
+        GL.perspective_matrix = perspective_matrix @ rotation_matrix @ translation_matrix
+
 
     @staticmethod
     def transform_in(translation, scale, rotation):
@@ -236,16 +305,56 @@ class GL:
         # do objeto ao redor do eixo x, y, z por t radianos, seguindo a regra da mão direita.
         # Quando se entrar em um nó transform se deverá salvar a matriz de transformação dos
         # modelos do mundo em alguma estrutura de pilha.
+        def quaternion_to_matrix(q):
+            """Converte um quaternion em uma matriz de rotação 4x4."""
+            w, x, y, z = q
+            n = np.dot(q, q)
+            if n < np.finfo(q.dtype).eps:
+                return np.identity(4)
+            q *= np.sqrt(2.0 / n)
+            q = np.outer(q, q)
+            return np.array([
+                [1.0 - q[2, 2] - q[3, 3], q[1, 2] - q[3, 0], q[1, 3] + q[2, 0], 0.0],
+                [q[1, 2] + q[3, 0], 1.0 - q[1, 1] - q[3, 3], q[2, 3] - q[1, 0], 0.0],
+                [q[1, 3] - q[2, 0], q[2, 3] + q[1, 0], 1.0 - q[1, 1] - q[2, 2], 0.0],
+                [0.0, 0.0, 0.0, 1.0]
+            ])
+        transformation_matrix = np.identity(4)
 
-        # O print abaixo é só para vocês verificarem o funcionamento, DEVE SER REMOVIDO.
-        print("Transform : ", end='')
-        if translation:
-            print("translation = {0} ".format(translation), end='') # imprime no terminal
-        if scale:
-            print("scale = {0} ".format(scale), end='') # imprime no terminal
-        if rotation:
-            print("rotation = {0} ".format(rotation), end='') # imprime no terminal
-        print("")
+        # Matriz de translação
+        translation_matrix = np.array([
+            [1, 0, 0, translation[0]],
+            [0, 1, 0, translation[1]],
+            [0, 0, 1, translation[2]],
+            [0, 0, 0, 1]
+        ])
+
+        # Matriz de escala
+        scale_matrix = np.array([
+            [scale[0], 0, 0, 0],
+            [0, scale[1], 0, 0],
+            [0, 0, scale[2], 0],
+            [0, 0, 0, 1]
+        ])
+
+        # Conversão de rotação para quaternion
+        angle = rotation[3]
+        axis = np.array(rotation[:3])
+        axis = axis / np.linalg.norm(axis)  # Normaliza o eixo de rotação
+        half_angle = angle / 2.0
+        sin_half_angle = np.sin(half_angle)
+        q = np.array([
+            np.cos(half_angle),
+            sin_half_angle * axis[0],
+            sin_half_angle * axis[1],
+            sin_half_angle * axis[2]
+        ])
+
+        # Converte o quaternion em uma matriz de rotação
+        rotation_matrix = quaternion_to_matrix(q)
+        transformation_matrix = translation_matrix @ rotation_matrix @ scale_matrix
+
+        GL.transformation_stack.append(transformation_matrix)
 
     @staticmethod
     def transform_out():
@@ -256,7 +365,8 @@ class GL:
         # pilha implementada.
 
         # O print abaixo é só para vocês verificarem o funcionamento, DEVE SER REMOVIDO.
-        print("Saindo de Transform")
+        if len(GL.transformation_stack) > 0:
+            GL.transformation_stack.pop()
 
     @staticmethod
     def triangleStripSet(point, stripCount, colors):
