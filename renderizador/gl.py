@@ -249,6 +249,17 @@ class GL:
                     if 0 <= x < GL.width and 0 <= y < GL.height:
                         if is_inside(vertices.flatten(), [x, y]):
                             gpu.GPU.draw_pixel([x, y], gpu.GPU.RGB8, colors.tolist())
+    
+    @staticmethod
+    def quaternion_to_matrix(q):
+        """Converte um quaternion em uma matriz de rotação 4x4."""
+        w, x, y, z = q
+        return np.array([
+            [1 - 2*y*y - 2*z*z, 2*x*y - 2*z*w, 2*x*z + 2*y*w, 0],
+            [2*x*y + 2*z*w, 1 - 2*x*x - 2*z*z, 2*y*z - 2*x*w, 0],
+            [2*x*z - 2*y*w, 2*y*z + 2*x*w, 1 - 2*x*x - 2*y*y, 0],
+            [0, 0, 0, 1]
+        ])
 
     @staticmethod
     def viewpoint(position, orientation, fieldOfView):
@@ -273,15 +284,16 @@ class GL:
         ])
 
         # Matriz de rotação da câmera a partir de `orientation`
-        angle = orientation[3]
+        half_angle = orientation[3] / 2
         x, y, z = orientation[:3]
-        c, s = np.cos(angle), np.sin(angle)
-        rotation_matrix = np.linalg.inv(np.array([
-            [c + (1-c)*x*x, (1-c)*x*y - s*z, (1-c)*x*z + s*y, 0],
-            [(1-c)*y*x + s*z, c + (1-c)*y*y, (1-c)*y*z - s*x, 0],
-            [(1-c)*z*x - s*y, (1-c)*z*y + s*x, c + (1-c)*z*z, 0],
-            [0, 0, 0, 1]
-        ]))
+        c, s = np.cos(half_angle), np.sin(half_angle)
+        q = np.array([
+            c,
+            s * x,
+            s * y,
+            s * z
+        ])
+        rotation_matrix = GL.quaternion_to_matrix(q)
 
         # Matriz de translação da câmera a partir de `position`
         translation_matrix = np.linalg.inv(np.array([
@@ -305,20 +317,7 @@ class GL:
         # do objeto ao redor do eixo x, y, z por t radianos, seguindo a regra da mão direita.
         # Quando se entrar em um nó transform se deverá salvar a matriz de transformação dos
         # modelos do mundo em alguma estrutura de pilha.
-        def quaternion_to_matrix(q):
-            """Converte um quaternion em uma matriz de rotação 4x4."""
-            w, x, y, z = q
-            n = np.dot(q, q)
-            if n < np.finfo(q.dtype).eps:
-                return np.identity(4)
-            q *= np.sqrt(2.0 / n)
-            q = np.outer(q, q)
-            return np.array([
-                [1.0 - q[2, 2] - q[3, 3], q[1, 2] - q[3, 0], q[1, 3] + q[2, 0], 0.0],
-                [q[1, 2] + q[3, 0], 1.0 - q[1, 1] - q[3, 3], q[2, 3] - q[1, 0], 0.0],
-                [q[1, 3] - q[2, 0], q[2, 3] + q[1, 0], 1.0 - q[1, 1] - q[2, 2], 0.0],
-                [0.0, 0.0, 0.0, 1.0]
-            ])
+        
         transformation_matrix = np.identity(4)
 
         # Matriz de translação
@@ -351,7 +350,7 @@ class GL:
         ])
 
         # Converte o quaternion em uma matriz de rotação
-        rotation_matrix = quaternion_to_matrix(q)
+        rotation_matrix = GL.quaternion_to_matrix(q)
         transformation_matrix = translation_matrix @ rotation_matrix @ scale_matrix
 
         GL.transformation_stack.append(transformation_matrix)
