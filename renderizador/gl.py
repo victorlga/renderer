@@ -582,24 +582,6 @@ class GL:
                 face_indices.append(coordIndex[i])
             i += 1
 
-        # Verificar se há alguma face não fechada (no caso de faltar -1 no final)
-        if len(face_indices) >= 3:
-            # Mesmo processamento para a última face
-            for j in range(1, len(face_indices) - 1):
-                idx1 = face_indices[0]
-                idx2 = face_indices[j]
-                idx3 = face_indices[j + 1]
-
-                p1 = np.array(coord[idx1 * 3:idx1 * 3 + 3])
-                p2 = np.array(coord[idx2 * 3:idx2 * 3 + 3])
-                p3 = np.array(coord[idx3 * 3:idx3 * 3 + 3])
-
-                p1_2d = GL.project_vertex(p1)
-                p2_2d = GL.project_vertex(p2)
-                p3_2d = GL.project_vertex(p3)
-
-                GL.draw_triangle([p1_2d, p2_2d, p3_2d], emissiveColor)
-
 
     @staticmethod
     def box(size, colors):
