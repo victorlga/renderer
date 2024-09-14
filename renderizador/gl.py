@@ -380,7 +380,7 @@ class GL:
         # Quando começar a usar Transforms dentre de outros Transforms, mais a frente no curso
         # Você precisará usar alguma estrutura de dados pilha para organizar as matrizes.
 
-        transformation_matrix = np.identity(4)
+        current_matrix = GL.transformation_stack[-1] if GL.transformation_stack else np.identity(4)
 
         # Matriz de translação
         translation_matrix = np.array([
@@ -391,12 +391,7 @@ class GL:
         ])
 
         # Matriz de escala
-        scale_matrix = np.array([
-            [scale[0], 0, 0, 0],
-            [0, scale[1], 0, 0],
-            [0, 0, scale[2], 0],
-            [0, 0, 0, 1]
-        ])
+        scale_matrix = np.diag([scale[0], scale[1], scale[2], 1])
 
         # Conversão de rotação para quaternion
         angle = rotation[3]
@@ -404,6 +399,7 @@ class GL:
         axis = axis / np.linalg.norm(axis)  # Normaliza o eixo de rotação
         half_angle = angle / 2.0
         sin_half_angle = np.sin(half_angle)
+
         q = np.array([
             np.cos(half_angle),
             sin_half_angle * axis[0],
@@ -413,7 +409,8 @@ class GL:
 
         # Converte o quaternion em uma matriz de rotação
         rotation_matrix = GL.quaternion_to_matrix(q)
-        transformation_matrix = translation_matrix @ rotation_matrix @ scale_matrix
+
+        transformation_matrix = current_matrix @ translation_matrix @ rotation_matrix @ scale_matrix
 
         GL.transformation_stack.append(transformation_matrix)
 
@@ -426,7 +423,7 @@ class GL:
         # pilha implementada.
 
         # O print abaixo é só para vocês verificarem o funcionamento, DEVE SER REMOVIDO.
-        if len(GL.transformation_stack) > 0:
+        if GL.transformation_stack:
             GL.transformation_stack.pop()
 
     @staticmethod
