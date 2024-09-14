@@ -51,6 +51,7 @@ class GL:
         while i < len(point):
             gpu.GPU.draw_pixel([int(point[i]), int(point[i+1])], gpu.GPU.RGB8, color)  # Desenhando cada ponto
             i += 2
+
     @staticmethod
     def polyline2D(lineSegments, colors):
         """Função usada para renderizar Polyline2D."""
@@ -181,6 +182,56 @@ class GL:
                         gpu.GPU.draw_pixel([x, y], gpu.GPU.RGB8, colors.tolist())  # Desenha o ponto se estiver dentro do triângulo
 
     @staticmethod
+    def project_vertex(vertex):
+        """Aplica a matriz de projeção a um vértice e realiza a divisão homogênea."""
+        vertex_homogeneous = np.append(vertex, 1)  # Adiciona o w = 1
+        projected_vertex = GL.perspective_matrix @ GL.transformation_stack[-1] @ vertex_homogeneous
+
+        # Realiza a divisão homogênea
+        projected_vertex /= projected_vertex[3]
+        
+        # Converte as coordenadas para 2D (considerando a viewport)
+        x = (projected_vertex[0] + 1) * 0.5 * GL.width
+        y = (1 - (projected_vertex[1] + 1) * 0.5) * GL.height
+        
+        return [x, y]
+    
+    @staticmethod
+    def draw_triangle(vertices, color):
+        """Desenha um triângulo a partir de três vértices."""
+
+        def is_inside(vertices, point):
+            # Utiliza numpy para cálculos vetorizados do produto vetorial
+            x0, y0, x1, y1, x2, y2 = np.array(vertices).flatten()
+
+            v0 = np.array([x2 - x0, y2 - y0])
+            v1 = np.array([x1 - x0, y1 - y0])
+            v2 = np.array(point) - np.array([x0, y0])
+
+            dot00 = np.dot(v0, v0)
+            dot01 = np.dot(v0, v1)
+            dot02 = np.dot(v0, v2)
+            dot11 = np.dot(v1, v1)
+            dot12 = np.dot(v1, v2)
+
+            invDenom = 1 / (dot00 * dot11 - dot01 * dot01)
+            u = (dot11 * dot02 - dot01 * dot12) * invDenom
+            v = (dot00 * dot12 - dot01 * dot02) * invDenom
+
+            return (u >= 0) & (v >= 0) & (u + v <= 1)
+
+        # Calcula o bounding box do triângulo
+        min_x, min_y = np.min(vertices, axis=0).astype(int)
+        max_x, max_y = np.max(vertices, axis=0).astype(int)
+
+        # Itera dentro do bounding box
+        for x in range(min_x, max_x + 1):
+            for y in range(min_y, max_y + 1):
+                if 0 <= x < GL.width and 0 <= y < GL.height:
+                    if is_inside(vertices, [x, y]):
+                        gpu.GPU.draw_pixel([x, y], gpu.GPU.RGB8, color.tolist())  # Desenha o ponto se estiver dentro do triângulo
+
+    @staticmethod
     def triangleSet(point, colors):
         """Função usada para renderizar TriangleSet."""
         # https://www.web3d.org/specifications/X3Dv4/ISO-IEC19775-1v4-IS/Part01/components/rendering.html#TriangleSet
@@ -200,27 +251,13 @@ class GL:
         colors = np.array(colors['emissiveColor']) * 255  # Convertendo a cor para valores entre 0 e 255
         colors = colors.astype(int)
 
-        def project_vertex(vertex):
-            """Aplica a matriz de projeção a um vértice e realiza a divisão homogênea."""
-            vertex_homogeneous = np.append(vertex, 1)  # Adiciona o w = 1
-            projected_vertex = GL.perspective_matrix @ GL.transformation_stack[-1] @ vertex_homogeneous
-
-            # Realiza a divisão homogênea
-            projected_vertex /= projected_vertex[3]
-            
-            # Converte as coordenadas para 2D (considerando a viewport)
-            x = (projected_vertex[0] + 1) * 0.5 * GL.width
-            y = (1 - (projected_vertex[1] + 1) * 0.5) * GL.height
-            
-            return [x, y]
-
         num_points = len(point) // 3
         points = np.array(point).reshape(num_points, 3)
 
         for i in range(0, num_points, 3):
-            p1 = project_vertex(points[i])
-            p2 = project_vertex(points[i+1])
-            p3 = project_vertex(points[i+2])
+            p1 = GL.project_vertex(points[i])
+            p2 = GL.project_vertex(points[i+1])
+            p3 = GL.project_vertex(points[i+2])
             vertices = np.array(p1+p2+p3).reshape(3, 2)
         
             def is_inside(vertices, point):
@@ -389,15 +426,33 @@ class GL:
         # depois 2, 3 e 4, e assim por diante. Cuidado com a orientação dos vértices, ou seja,
         # todos no sentido horário ou todos no sentido anti-horário, conforme especificado.
 
-        # O print abaixo é só para vocês verificarem o funcionamento, DEVE SER REMOVIDO.
-        print("TriangleStripSet : pontos = {0} ".format(point), end='')
-        for i, strip in enumerate(stripCount):
-            print("strip[{0}] = {1} ".format(i, strip), end='')
-        print("")
-        print("TriangleStripSet : colors = {0}".format(colors)) # imprime no terminal as cores
+        colors = np.array(colors['emissiveColor']) * 255
+        colors = colors.astype(int)
 
-        # Exemplo de desenho de um pixel branco na coordenada 10, 10
-        gpu.GPU.draw_pixel([10, 10], gpu.GPU.RGB8, [255, 255, 255])  # altera pixel
+        offset = 0
+
+        for count in stripCount:
+            # Vamos percorrer os vértices da tira de triângulos
+            for i in range(count - 2):
+                # Pegamos três vértices consecutivos
+                p1 = point[(offset + i) * 3:(offset + i) * 3 + 3]
+                p2 = point[(offset + i + 1) * 3:(offset + i + 1) * 3 + 3]
+                p3 = point[(offset + i + 2) * 3:(offset + i + 2) * 3 + 3]
+
+                # Se o índice é ímpar, invertemos a ordem dos vértices para garantir a orientação correta
+                if i % 2 == 1:
+                    p1, p3 = p3, p1
+                
+                # Projeta os vértices para o espaço 2D
+                p1_2d = GL.project_vertex(np.array(p1))
+                p2_2d = GL.project_vertex(np.array(p2))
+                p3_2d = GL.project_vertex(np.array(p3))
+                
+                # Desenhe o triângulo
+                GL.draw_triangle([p1_2d, p2_2d, p3_2d], colors)
+
+            # Atualiza o deslocamento para a próxima tira de triângulos
+            offset += count
 
     @staticmethod
     def indexedTriangleStripSet(point, index, colors):
@@ -414,13 +469,44 @@ class GL:
         # primeiro triângulo será com os vértices 0, 1 e 2, depois serão os vértices 1, 2 e 3,
         # depois 2, 3 e 4, e assim por diante. Cuidado com a orientação dos vértices, ou seja,
         # todos no sentido horário ou todos no sentido anti-horário, conforme especificado.
+        # Converte as cores para valores entre 0 e 255
+        colors = np.array(colors['emissiveColor']) * 255
+        colors = colors.astype(int)
 
-        # O print abaixo é só para vocês verificarem o funcionamento, DEVE SER REMOVIDO.
-        print("IndexedTriangleStripSet : pontos = {0}, index = {1}".format(point, index))
-        print("IndexedTriangleStripSet : colors = {0}".format(colors)) # imprime as cores
+        # Precisamos percorrer a lista de índices e montar os triângulos
+        i = 0  # Índice para percorrer o array de índices
+        
+        while i < len(index) - 2:
+            # Verifica se encontramos o delimitador -1
+            if index[i] == -1 or index[i + 1] == -1 or index[i + 2] == -1:
+                i += 1
+                continue
+            
+            # Obtemos os três índices para o triângulo
+            idx1 = index[i]
+            idx2 = index[i + 1]
+            idx3 = index[i + 2]
 
-        # Exemplo de desenho de um pixel branco na coordenada 10, 10
-        gpu.GPU.draw_pixel([10, 10], gpu.GPU.RGB8, [255, 255, 255])  # altera pixel
+            # Obtemos os vértices correspondentes usando os índices
+            p1 = point[idx1 * 3:idx1 * 3 + 3]
+            p2 = point[idx2 * 3:idx2 * 3 + 3]
+            p3 = point[idx3 * 3:idx3 * 3 + 3]
+
+            # Para alternar a orientação, invertemos os vértices de triângulos ímpares
+            if i % 2 == 1:
+                p1, p3 = p3, p1
+
+            # Projeta os vértices no espaço 2D
+            p1_2d = GL.project_vertex(np.array(p1))
+            p2_2d = GL.project_vertex(np.array(p2))
+            p3_2d = GL.project_vertex(np.array(p3))
+            
+            # Desenha o triângulo
+            GL.draw_triangle([p1_2d, p2_2d, p3_2d], colors)
+
+            # Incrementa o índice para a próxima sequência
+            i += 1
+
 
     @staticmethod
     def indexedFaceSet(coord, coordIndex, colorPerVertex, color, colorIndex,
