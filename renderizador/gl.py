@@ -547,23 +547,59 @@ class GL:
         # cor da textura conforme a posição do mapeamento. Dentro da classe GPU já está
         # implementadado um método para a leitura de imagens.
 
-        # Os prints abaixo são só para vocês verificarem o funcionamento, DEVE SER REMOVIDO.
-        print("IndexedFaceSet : ")
-        if coord:
-            print("\tpontos(x, y, z) = {0}, coordIndex = {1}".format(coord, coordIndex))
-        print("colorPerVertex = {0}".format(colorPerVertex))
-        if colorPerVertex and color and colorIndex:
-            print("\tcores(r, g, b) = {0}, colorIndex = {1}".format(color, colorIndex))
-        if texCoord and texCoordIndex:
-            print("\tpontos(u, v) = {0}, texCoordIndex = {1}".format(texCoord, texCoordIndex))
-        if current_texture:
-            image = gpu.GPU.load_texture(current_texture[0])
-            print("\t Matriz com image = {0}".format(image))
-            print("\t Dimensões da image = {0}".format(image.shape))
-        print("IndexedFaceSet : colors = {0}".format(colors))  # imprime no terminal as cores
+        # Conversão da cor emissiva
+        emissiveColor = np.array(colors['emissiveColor']) * 255
+        emissiveColor = emissiveColor.astype(int)
 
-        # Exemplo de desenho de um pixel branco na coordenada 10, 10
-        gpu.GPU.draw_pixel([10, 10], gpu.GPU.RGB8, [255, 255, 255])  # altera pixel
+        i = 0
+        face_indices = []
+
+        while i < len(coordIndex):
+            if coordIndex[i] == -1:
+                # Face completa, processar
+                if len(face_indices) >= 3:
+                    # Triangularizar a face
+                    for j in range(1, len(face_indices) - 1):
+                        idx1 = face_indices[0]
+                        idx2 = face_indices[j]
+                        idx3 = face_indices[j + 1]
+
+                        # Obter os vértices correspondentes
+                        p1 = np.array(coord[idx1 * 3:idx1 * 3 + 3])
+                        p2 = np.array(coord[idx2 * 3:idx2 * 3 + 3])
+                        p3 = np.array(coord[idx3 * 3:idx3 * 3 + 3])
+
+                        # Aplicar transformações e projeção
+                        p1_2d = GL.project_vertex(p1)
+                        p2_2d = GL.project_vertex(p2)
+                        p3_2d = GL.project_vertex(p3)
+
+                        # Desenhar o triângulo
+                        GL.draw_triangle([p1_2d, p2_2d, p3_2d], emissiveColor)
+                # Limpar a lista de índices para a próxima face
+                face_indices = []
+            else:
+                face_indices.append(coordIndex[i])
+            i += 1
+
+        # Verificar se há alguma face não fechada (no caso de faltar -1 no final)
+        if len(face_indices) >= 3:
+            # Mesmo processamento para a última face
+            for j in range(1, len(face_indices) - 1):
+                idx1 = face_indices[0]
+                idx2 = face_indices[j]
+                idx3 = face_indices[j + 1]
+
+                p1 = np.array(coord[idx1 * 3:idx1 * 3 + 3])
+                p2 = np.array(coord[idx2 * 3:idx2 * 3 + 3])
+                p3 = np.array(coord[idx3 * 3:idx3 * 3 + 3])
+
+                p1_2d = GL.project_vertex(p1)
+                p2_2d = GL.project_vertex(p2)
+                p3_2d = GL.project_vertex(p3)
+
+                GL.draw_triangle([p1_2d, p2_2d, p3_2d], emissiveColor)
+
 
     @staticmethod
     def box(size, colors):
