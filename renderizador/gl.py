@@ -197,6 +197,24 @@ class GL:
         return [x, y]
     
     @staticmethod
+    def project_vertex(vertex):
+        """Aplica a transformação e projeção a um vértice."""
+        vertex_homogeneous = np.append(vertex, 1)  # Coordenadas homogêneas
+
+        model_matrix = GL.transformation_stack[-1] if GL.transformation_stack else np.identity(4)
+        transformed_vertex = model_matrix @ vertex_homogeneous
+        projected_vertex = GL.perspective_matrix @ transformed_vertex
+
+        # Realizamos a divisão por w
+        projected_vertex /= projected_vertex[3]
+
+        # Convertendo para coordenadas de tela
+        x = (projected_vertex[0] + 1) * 0.5 * GL.width
+        y = (1 - (projected_vertex[1] + 1) * 0.5) * GL.height
+
+        return [x, y]
+
+    @staticmethod
     def draw_triangle(vertices, color):
         """Desenha um triângulo a partir de três vértices."""
 
