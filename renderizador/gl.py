@@ -132,6 +132,43 @@ class GL:
         # Desenha cada ponto na tela
         for point in valid_points:
             gpu.GPU.draw_pixel(point.tolist(), gpu.GPU.RGB8, color.tolist())
+    
+    
+    @staticmethod
+    def is_inside(vertices, point):
+        # Utiliza numpy para cálculos vetorizados do produto vetorial
+        x0, y0, x1, y1, x2, y2 = np.array(vertices).flatten()
+
+        v0 = np.array([x2 - x0, y2 - y0])
+        v1 = np.array([x1 - x0, y1 - y0])
+        v2 = np.array(point) - np.array([x0, y0])
+
+        dot00 = np.dot(v0, v0)
+        dot01 = np.dot(v0, v1)
+        dot02 = np.dot(v0, v2)
+        dot11 = np.dot(v1, v1)
+        dot12 = np.dot(v1, v2)
+
+        invDenom = 1 / (dot00 * dot11 - dot01 * dot01)
+        u = (dot11 * dot02 - dot01 * dot12) * invDenom
+        v = (dot00 * dot12 - dot01 * dot02) * invDenom
+
+        return (u >= 0) & (v >= 0) & (u + v <= 1)
+
+
+    @staticmethod
+    def rasterize_triangle(vertices, colors):
+        """Função que rasteriza qualquer triângulo."""
+        # Calcula o bounding box do triângulo
+        min_x, min_y = np.min(vertices, axis=0).astype(int)
+        max_x, max_y = np.max(vertices, axis=0).astype(int)
+
+        # Itera dentro do bounding box e desenha os pixels
+        for x in range(min_x, max_x + 1):
+            for y in range(min_y, max_y + 1):
+                if 0 <= x < GL.width and 0 <= y < GL.height:
+                    if GL.is_inside(vertices, [x, y]):
+                        gpu.GPU.draw_pixel([x, y], gpu.GPU.RGB8, colors.tolist()) 
 
     @staticmethod
     def triangleSet2D(vertices, colors):
@@ -148,53 +185,8 @@ class GL:
         colors = np.array(colors['emissiveColor']) * 255  # Convertendo a cor para valores entre 0 e 255
         colors = colors.astype(int)
         vertices = np.array(vertices).reshape(3, 2)
-        
-        def is_inside(vertices, point):
-            # Utiliza numpy para cálculos vetorizados do produto vetorial
-            x0, y0, x1, y1, x2, y2 = vertices.flatten()
 
-            v0 = np.array([x2 - x0, y2 - y0])
-            v1 = np.array([x1 - x0, y1 - y0])
-            v2 = np.array(point) - np.array([x0, y0])
-
-            dot00 = np.dot(v0, v0)
-            dot01 = np.dot(v0, v1)
-            dot02 = np.dot(v0, v2)
-            dot11 = np.dot(v1, v1)
-            dot12 = np.dot(v1, v2)
-
-            # Calcula o determinante e verifica se o ponto está dentro do triângulo
-            invDenom = 1 / (dot00 * dot11 - dot01 * dot01)
-            u = (dot11 * dot02 - dot01 * dot12) * invDenom
-            v = (dot00 * dot12 - dot01 * dot02) * invDenom
-
-            return (u >= 0) & (v >= 0) & (u + v <= 1)
-
-        # Calcula o bounding box do triângulo
-        min_x, min_y = np.min(vertices, axis=0).astype(int)
-        max_x, max_y = np.max(vertices, axis=0).astype(int)
-
-        # Itera dentro do bounding box
-        for x in range(min_x, max_x + 1):
-            for y in range(min_y, max_y + 1):
-                if 0 <= x < GL.width and 0 <= y < GL.height:
-                    if is_inside(vertices.flatten(), [x, y]):
-                        gpu.GPU.draw_pixel([x, y], gpu.GPU.RGB8, colors.tolist())  # Desenha o ponto se estiver dentro do triângulo
-
-    @staticmethod
-    def project_vertex(vertex):
-        """Aplica a matriz de projeção a um vértice e realiza a divisão homogênea."""
-        vertex_homogeneous = np.append(vertex, 1)  # Adiciona o w = 1
-        projected_vertex = GL.perspective_matrix @ GL.transformation_stack[-1] @ vertex_homogeneous
-
-        # Realiza a divisão homogênea
-        projected_vertex /= projected_vertex[3]
-        
-        # Converte as coordenadas para 2D (considerando a viewport)
-        x = (projected_vertex[0] + 1) * 0.5 * GL.width
-        y = (1 - (projected_vertex[1] + 1) * 0.5) * GL.height
-        
-        return [x, y]
+        GL.rasterize_triangle(vertices, colors)
     
     @staticmethod
     def project_vertex(vertex):
@@ -213,41 +205,6 @@ class GL:
         y = (1 - (projected_vertex[1] + 1) * 0.5) * GL.height
 
         return [x, y]
-
-    @staticmethod
-    def draw_triangle(vertices, color):
-        """Desenha um triângulo a partir de três vértices."""
-
-        def is_inside(vertices, point):
-            # Utiliza numpy para cálculos vetorizados do produto vetorial
-            x0, y0, x1, y1, x2, y2 = np.array(vertices).flatten()
-
-            v0 = np.array([x2 - x0, y2 - y0])
-            v1 = np.array([x1 - x0, y1 - y0])
-            v2 = np.array(point) - np.array([x0, y0])
-
-            dot00 = np.dot(v0, v0)
-            dot01 = np.dot(v0, v1)
-            dot02 = np.dot(v0, v2)
-            dot11 = np.dot(v1, v1)
-            dot12 = np.dot(v1, v2)
-
-            invDenom = 1 / (dot00 * dot11 - dot01 * dot01)
-            u = (dot11 * dot02 - dot01 * dot12) * invDenom
-            v = (dot00 * dot12 - dot01 * dot02) * invDenom
-
-            return (u >= 0) & (v >= 0) & (u + v <= 1)
-
-        # Calcula o bounding box do triângulo
-        min_x, min_y = np.min(vertices, axis=0).astype(int)
-        max_x, max_y = np.max(vertices, axis=0).astype(int)
-
-        # Itera dentro do bounding box
-        for x in range(min_x, max_x + 1):
-            for y in range(min_y, max_y + 1):
-                if 0 <= x < GL.width and 0 <= y < GL.height:
-                    if is_inside(vertices, [x, y]):
-                        gpu.GPU.draw_pixel([x, y], gpu.GPU.RGB8, color.tolist())  # Desenha o ponto se estiver dentro do triângulo
 
     @staticmethod
     def triangleSet(point, colors):
@@ -278,37 +235,8 @@ class GL:
             p3 = GL.project_vertex(points[i+2])
             vertices = np.array(p1+p2+p3).reshape(3, 2)
         
-            def is_inside(vertices, point):
-                # Utiliza numpy para cálculos vetorizados do produto vetorial
-                x0, y0, x1, y1, x2, y2 = vertices.flatten()
-
-                v0 = np.array([x2 - x0, y2 - y0])
-                v1 = np.array([x1 - x0, y1 - y0])
-                v2 = np.array(point) - np.array([x0, y0])
-
-                dot00 = np.dot(v0, v0)
-                dot01 = np.dot(v0, v1)
-                dot02 = np.dot(v0, v2)
-                dot11 = np.dot(v1, v1)
-                dot12 = np.dot(v1, v2)
-
-                # Calcula o determinante e verifica se o ponto está dentro do triângulo
-                invDenom = 1 / (dot00 * dot11 - dot01 * dot01)
-                u = (dot11 * dot02 - dot01 * dot12) * invDenom
-                v = (dot00 * dot12 - dot01 * dot02) * invDenom
-
-                return (u >= 0) & (v >= 0) & (u + v <= 1)
-
-            # Calcula o bounding box do triângulo
-            min_x, min_y = np.min(vertices, axis=0).astype(int)
-            max_x, max_y = np.max(vertices, axis=0).astype(int)
-
-            # Itera dentro do bounding box
-            for x in range(min_x, max_x + 1):
-                for y in range(min_y, max_y + 1):
-                    if 0 <= x < GL.width and 0 <= y < GL.height:
-                        if is_inside(vertices.flatten(), [x, y]):
-                            gpu.GPU.draw_pixel([x, y], gpu.GPU.RGB8, colors.tolist())
+            # Utiliza a função rasterize_triangle para desenhar o triângulo
+            GL.rasterize_triangle(vertices, colors)
     
     @staticmethod
     def quaternion_to_matrix(q):
@@ -464,7 +392,7 @@ class GL:
                 p3_2d = GL.project_vertex(np.array(p3))
                 
                 # Desenhe o triângulo
-                GL.draw_triangle([p1_2d, p2_2d, p3_2d], colors)
+                GL.rasterize_triangle([p1_2d, p2_2d, p3_2d], colors)
 
             # Atualiza o deslocamento para a próxima tira de triângulos
             offset += count
@@ -517,7 +445,7 @@ class GL:
             p3_2d = GL.project_vertex(np.array(p3))
             
             # Desenha o triângulo
-            GL.draw_triangle([p1_2d, p2_2d, p3_2d], colors)
+            GL.rasterize_triangle([p1_2d, p2_2d, p3_2d], colors)
 
             # Incrementa o índice para a próxima sequência
             i += 1
@@ -576,7 +504,7 @@ class GL:
                         p3_2d = GL.project_vertex(p3)
 
                         # Desenhar o triângulo
-                        GL.draw_triangle([p1_2d, p2_2d, p3_2d], emissiveColor)
+                        GL.rasterize_triangle([p1_2d, p2_2d, p3_2d], emissiveColor)
                 # Limpar a lista de índices para a próxima face
                 face_indices = []
             else:
