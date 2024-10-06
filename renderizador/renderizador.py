@@ -20,6 +20,8 @@ import gpu          # Simula os recursos de uma GPU
 import x3d          # Faz a leitura do arquivo X3D, gera o grafo de cena e faz traversal
 import scenegraph   # Imprime o grafo de cena no console
 
+import numpy as np
+
 LARGURA = 60  # Valor padrão para largura da tela
 ALTURA = 40   # Valor padrão para altura da tela
 
@@ -41,13 +43,15 @@ class Renderizador:
         # Configurando color buffers para exibição na tela
 
         # Cria uma (1) posição de FrameBuffer na GPU
-        fbo = gpu.GPU.gen_framebuffers(1)
+        fbo = gpu.GPU.gen_framebuffers(2)
 
-        # Define o atributo FRONT como o FrameBuffe principal
-        self.framebuffers["FRONT"] = fbo[0]
+        # Define o atributo PREPRO como o FrameBuffe principal
+        self.framebuffers["PREPRO"] = fbo[0]
+        self.framebuffers["FRONT"] = fbo[1]
 
         # Define que a posição criada será usada para desenho e leitura
-        gpu.GPU.bind_framebuffer(gpu.GPU.FRAMEBUFFER, self.framebuffers["FRONT"])
+        gpu.GPU.bind_framebuffer(gpu.GPU.FRAMEBUFFER, self.framebuffers["PREPRO"])
+
         # Opções:
         # - DRAW_FRAMEBUFFER: Faz o bind só para escrever no framebuffer
         # - READ_FRAMEBUFFER: Faz o bind só para leitura no framebuffer
@@ -56,6 +60,14 @@ class Renderizador:
         # Aloca memória no FrameBuffer para um tipo e tamanho especificado de buffer
 
         # Memória de Framebuffer para canal de cores
+        gpu.GPU.framebuffer_storage(
+            self.framebuffers["PREPRO"],
+            gpu.GPU.COLOR_ATTACHMENT,
+            gpu.GPU.RGB8,
+            self.width * 2,
+            self.height * 2
+        )
+        
         gpu.GPU.framebuffer_storage(
             self.framebuffers["FRONT"],
             gpu.GPU.COLOR_ATTACHMENT,
@@ -112,6 +124,14 @@ class Renderizador:
         # Essa é uma chamada conveniente para manipulação de buffers
         # ao final da renderização de um frame. Como por exemplo, executar
         # downscaling da imagem.
+        buffer = gpu.GPU.get_frame_buffer()
+        gpu.GPU.bind_framebuffer(gpu.GPU.FRAMEBUFFER, self.framebuffers["FRONT"])
+
+        for y in range(0, buffer.shape[0], 2):
+            for x in range(0, buffer.shape[1], 2):
+                prepro_pixels = buffer[y:y+2, x:x+2]
+                avg_color = np.mean(prepro_pixels, axis=(0, 1)).astype(int)
+                gpu.GPU.draw_pixel([x//2, y//2], gpu.GPU.RGB8, avg_color)
 
         # Método para a troca dos buffers (NÃO IMPLEMENTADO)
         # Esse método será utilizado na fase de implementação de animações

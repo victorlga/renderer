@@ -27,8 +27,8 @@ class GL:
     @staticmethod
     def setup(width, height, near=0.01, far=1000):
         """Definr parametros para câmera de razão de aspecto, plano próximo e distante."""
-        GL.width = width
-        GL.height = height
+        GL.width = width * 2
+        GL.height = height * 2
         GL.near = near
         GL.far = far
         GL.perspective_matrix = None
@@ -184,7 +184,7 @@ class GL:
 
         colors = np.array(colors['emissiveColor']) * 255  # Convertendo a cor para valores entre 0 e 255
         colors = colors.astype(int)
-        vertices = np.array(vertices).reshape(3, 2)
+        vertices = np.array(vertices).reshape(3, 2) * 2
 
         GL.rasterize_triangle(vertices, colors)
     
@@ -228,12 +228,13 @@ class GL:
 
         num_points = len(point) // 3
         points = np.array(point).reshape(num_points, 3)
-
+        
         for i in range(0, num_points, 3):
             p1 = GL.project_vertex(points[i])
             p2 = GL.project_vertex(points[i+1])
             p3 = GL.project_vertex(points[i+2])
             vertices = np.array(p1+p2+p3).reshape(3, 2)
+
         
             # Utiliza a função rasterize_triangle para desenhar o triângulo
             GL.rasterize_triangle(vertices, colors)
