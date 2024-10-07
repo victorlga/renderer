@@ -185,7 +185,7 @@ class GL:
 
 
     @staticmethod
-    def rasterize_triangle(vertices, colors, z_coords=None):
+    def rasterize_triangle(vertices, colors, z_coords=None, transparency=None):
         
         """Função que rasteriza qualquer triângulo."""
         # Calcula o bounding box do triângulo
@@ -216,14 +216,15 @@ class GL:
                         interpolated_color = interpolated_color.astype(int)
                         
 
-                        depht_z_interpol = 1 / (alpha / z_coords[0][1] + beta / z_coords[1][1] + gamma / z_coords[2][1])
-
-                        print("Primeiro: ", depht_z_interpol)
-                        print("Segundo: ", gpu.GPU.read_pixel([x, y], gpu.GPU.DEPTH_COMPONENT32F))
-                        print()
-                        if gpu.GPU.read_pixel([x, y], gpu.GPU.DEPTH_COMPONENT32F) > depht_z_interpol:
-
-                            gpu.GPU.draw_pixel([x, y], gpu.GPU.DEPTH_COMPONENT32F, [depht_z_interpol])
+                        new_depht = 1 / (alpha / z_coords[0][1] + beta / z_coords[1][1] + gamma / z_coords[2][1])
+                        if gpu.GPU.read_pixel([x, y], gpu.GPU.DEPTH_COMPONENT32F) > new_depht:
+                            gpu.GPU.draw_pixel([x, y], gpu.GPU.DEPTH_COMPONENT32F, [new_depht])
+                            
+                            if transparency:
+                                current_color = gpu.GPU.read_pixel([x, y], gpu.GPU.RGB8) * transparency
+                                new_color = interpolated_color * (1 - transparency)
+                                interpolated_color = current_color + new_color
+                                
                             gpu.GPU.draw_pixel([x, y], gpu.GPU.RGB8, interpolated_color.tolist())
 
                     else:
@@ -282,9 +283,10 @@ class GL:
         # (emissiveColor), conforme implementar novos materias você deverá suportar outros
         # tipos de cores.
         
-        colors = np.array(colors['emissiveColor']) * 255  # Convertendo a cor para valores entre 0 e 255
-        colors = colors.astype(int)
-        colors = [colors] * 3
+        emissiveColor = np.array(colors['emissiveColor']) * 255  # Convertendo a cor para valores entre 0 e 255
+        emissiveColor = emissiveColor.astype(int)
+        emissiveColor = [emissiveColor] * 3
+        transparency = colors['transparency']
 
         num_points = len(point) // 3
         points = np.array(point).reshape(num_points, 3)
@@ -296,7 +298,7 @@ class GL:
             vertices = np.array(p1+p2+p3).reshape(3, 2)
 
             # Utiliza a função rasterize_triangle para desenhar o triângulo
-            GL.rasterize_triangle(vertices, colors, z_coords=[z1, z2, z3])
+            GL.rasterize_triangle(vertices, emissiveColor, z_coords=[z1, z2, z3], transparency=transparency)
     
     @staticmethod
     def quaternion_to_matrix(q):
