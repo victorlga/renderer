@@ -68,6 +68,15 @@ class Renderizador:
             self.height * 2
         )
         
+        # Descomente as seguintes linhas se for usar um Framebuffer para profundidade
+        gpu.GPU.framebuffer_storage(
+            self.framebuffers["PREPRO"],
+            gpu.GPU.DEPTH_ATTACHMENT,
+            gpu.GPU.DEPTH_COMPONENT32F,
+            self.width * 2,
+            self.height * 2
+        )
+        
         gpu.GPU.framebuffer_storage(
             self.framebuffers["FRONT"],
             gpu.GPU.COLOR_ATTACHMENT,
@@ -75,15 +84,6 @@ class Renderizador:
             self.width,
             self.height
         )
-
-        # Descomente as seguintes linhas se for usar um Framebuffer para profundidade
-        # gpu.GPU.framebuffer_storage(
-        #     self.framebuffers["FRONT"],
-        #     gpu.GPU.DEPTH_ATTACHMENT,
-        #     gpu.GPU.DEPTH_COMPONENT32F,
-        #     self.width,
-        #     self.height
-        # )
     
         # Opções:
         # - COLOR_ATTACHMENT: alocações para as cores da imagem renderizada

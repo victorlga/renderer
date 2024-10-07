@@ -155,9 +155,37 @@ class GL:
 
         return (u >= 0) & (v >= 0) & (u + v <= 1)
 
+    
+    @staticmethod
+    def compute_barycentric_coordinates(vertices, point):
+        """Calcula os pesos baricêntricos (α, β, γ) para um ponto em relação a um triângulo usando as fórmulas da imagem."""
+
+        # Extraindo as coordenadas dos vértices
+        xA, yA = vertices[0]
+        xB, yB = vertices[1]
+        xC, yC = vertices[2]
+
+        # Extraindo a coordenada do ponto
+        x, y = point
+
+        # Cálculo do denominador (determinante)
+        alpha_denom = -(xA - xB) * (yC - yB) + (yA - yB) * (xC - xB)
+        beta_denom = -(xB - xC) * (yA - yC) + (yB - yC) * (xA - xC)
+
+        # Cálculo de alpha
+        alpha = (-(x - xB) * (yC - yB) + (y - yB) * (xC - xB)) / alpha_denom
+
+        # Cálculo de beta
+        beta = (-(x - xC) * (yA - yC) + (y - yC) * (xA - xC)) / beta_denom
+
+        # Cálculo de gamma
+        gamma = 1.0 - alpha - beta
+
+        return alpha, beta, gamma
+
 
     @staticmethod
-    def rasterize_triangle(vertices, colors):
+    def rasterize_triangle(vertices, color, colorPerVertex=None):
         """Função que rasteriza qualquer triângulo."""
         # Calcula o bounding box do triângulo
         min_x, min_y = np.min(vertices, axis=0).astype(int)
@@ -167,8 +195,22 @@ class GL:
         for x in range(min_x, max_x + 1):
             for y in range(min_y, max_y + 1):
                 if 0 <= x < GL.width and 0 <= y < GL.height:
-                    if GL.is_inside(vertices, [x, y]):
-                        gpu.GPU.draw_pixel([x, y], gpu.GPU.RGB8, colors.tolist()) 
+                    if not GL.is_inside(vertices, [x, y]):
+                        continue
+                    
+                    if colorPerVertex:
+                        alpha, beta, gamma = GL.compute_barycentric_coordinates(vertices, (x, y))
+
+                        interpolated_color = (
+                            alpha * colorPerVertex[0] +   # cor do vértice 1
+                            beta * colorPerVertex[1] +    # cor do vértice 2
+                            gamma * colorPerVertex[2]     # cor do vértice 3
+                        )
+
+                        # Converte a cor interpolada para inteiro
+                        color = interpolated_color.astype(int)
+
+                    gpu.GPU.draw_pixel([x, y], gpu.GPU.RGB8, color.tolist()) 
 
     @staticmethod
     def triangleSet2D(vertices, colors):
@@ -451,7 +493,6 @@ class GL:
             # Incrementa o índice para a próxima sequência
             i += 1
 
-
     @staticmethod
     def indexedFaceSet(coord, coordIndex, colorPerVertex, color, colorIndex,
                        texCoord, texCoordIndex, colors, current_texture):
@@ -504,8 +545,18 @@ class GL:
                         p2_2d = GL.project_vertex(p2)
                         p3_2d = GL.project_vertex(p3)
 
+                        colors_for_triangle = []
+
+                        if colorPerVertex:
+                            c1 = np.array(color[colorIndex[idx1] * 3: colorIndex[idx1] * 3 + 3]) * 255
+                            c2 = np.array(color[colorIndex[idx2] * 3: colorIndex[idx2] * 3 + 3]) * 255
+                            c3 = np.array(color[colorIndex[idx3] * 3: colorIndex[idx3] * 3 + 3]) * 255
+
+                            colors_for_triangle = [c1, c2, c3]
+
                         # Desenhar o triângulo
-                        GL.rasterize_triangle([p1_2d, p2_2d, p3_2d], emissiveColor)
+                        GL.rasterize_triangle([p1_2d, p2_2d, p3_2d], emissiveColor, colorPerVertex=colors_for_triangle)
+
                 # Limpar a lista de índices para a próxima face
                 face_indices = []
             else:
