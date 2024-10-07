@@ -185,7 +185,7 @@ class GL:
 
 
     @staticmethod
-    def rasterize_triangle(vertices, colors, z_coords=None, transparency=None):
+    def rasterize_triangle(vertices, colors, z_coords=None, transparency=None, texture=None, uv=None):
         
         """Função que rasteriza qualquer triângulo."""
         # Calcula o bounding box do triângulo
@@ -202,6 +202,7 @@ class GL:
                     if z_coords:
                         alpha, beta, gamma = GL.compute_barycentric_coordinates(vertices, (x, y))
 
+
                         interpolated_color = (
                             alpha * (colors[0] / z_coords[0][0]) +
                             beta  * (colors[1] / z_coords[1][0]) +
@@ -214,12 +215,22 @@ class GL:
 
                         # Converte a cor interpolada para inteiro
                         interpolated_color = interpolated_color.astype(int)
-                        
+
+                        if (not texture is None):
+                            texture_height, texture_width, _ = texture.shape
+                            u1, u2, u3 = uv[0]
+                            v1, v2, v3 = uv[1]
+                            u_interpolated = (alpha * u1 + beta * u2 + gamma * u3)
+                            v_interpolated = 1 - (alpha * v1 + beta * v2 + gamma * v3)
+
+                            tex_x = int(u_interpolated * texture_width)
+                            tex_y = int(v_interpolated * texture_height)
+                            interpolated_color = texture[tex_y, tex_x][:3]
+                            transparency = -(texture[tex_y, tex_x][3] - 255) / 255
 
                         new_depht = 1 / (alpha / z_coords[0][1] + beta / z_coords[1][1] + gamma / z_coords[2][1])
                         if gpu.GPU.read_pixel([x, y], gpu.GPU.DEPTH_COMPONENT32F) > new_depht:
                             gpu.GPU.draw_pixel([x, y], gpu.GPU.DEPTH_COMPONENT32F, [new_depht])
-                            
                             if transparency:
                                 current_color = gpu.GPU.read_pixel([x, y], gpu.GPU.RGB8) * transparency
                                 new_color = interpolated_color * (1 - transparency)
@@ -540,6 +551,10 @@ class GL:
         # cor da textura conforme a posição do mapeamento. Dentro da classe GPU já está
         # implementadado um método para a leitura de imagens.
 
+        texture = None
+        if current_texture:
+            texture = gpu.GPU.load_texture(current_texture[0])
+
         # Conversão da cor emissiva
         emissiveColor = np.array(colors['emissiveColor']) * 255
         emissiveColor = emissiveColor.astype(int)
@@ -547,6 +562,7 @@ class GL:
         i = 0
         face_indices = []
         color_indices = []
+        tex_indices = []
 
         while i < len(coordIndex):
             if coordIndex[i] == -1:
@@ -576,17 +592,26 @@ class GL:
                             c3 = np.array(color[color_indices[j + 1] * 3: color_indices[j + 1] * 3 + 3]) * 255
 
                             colors_for_interpol = [c1, c2, c3]
+                        
+                        uv = []
+                        if current_texture:
+                            u = [texCoord[tex_indices[j + 1] * 2], texCoord[tex_indices[j] * 2], texCoord[tex_indices[0] * 2]]
+                            v = [texCoord[tex_indices[j + 1] * 2 + 1], texCoord[tex_indices[j] * 2 + 1], texCoord[tex_indices[0] * 2 + 1]]
+                            uv = [u, v]
 
                         # Desenhar o triângulo
-                        GL.rasterize_triangle([p1_2d, p2_2d, p3_2d], colors_for_interpol, z_coords=[z1, z2, z3])
+                        GL.rasterize_triangle([p1_2d, p2_2d, p3_2d], colors_for_interpol, z_coords=[z1, z2, z3], texture=texture, uv=uv)
 
                 # Limpar a lista de índices para a próxima face
                 face_indices = []
                 color_indices = []
+                tex_indices = []
             else:
                 face_indices.append(coordIndex[i])
                 if colorIndex:
                     color_indices.append(colorIndex[i])
+                if texCoordIndex:
+                    tex_indices.append(texCoordIndex[i])
             i += 1
 
 
