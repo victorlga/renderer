@@ -185,7 +185,7 @@ class GL:
 
 
     @staticmethod
-    def rasterize_triangle(vertices, color, colorPerVertex=None, z_coords=None):
+    def rasterize_triangle(vertices, color, colorsForInterpol=None, z_coords=None):
         """Função que rasteriza qualquer triângulo."""
         # Calcula o bounding box do triângulo
         min_x, min_y = np.min(vertices, axis=0).astype(int)
@@ -198,16 +198,16 @@ class GL:
                     if not GL.is_inside(vertices, [x, y]):
                         continue
                     
-                    if colorPerVertex:
+                    if colorsForInterpol:
                         alpha, beta, gamma = GL.compute_barycentric_coordinates(vertices, (x, y))
                         interpolated_color = (
-                            alpha * (colorPerVertex[0] / z_coords[0]) +
-                            beta  * (colorPerVertex[1] / z_coords[1]) +
-                            gamma * (colorPerVertex[2] / z_coords[2])
+                            alpha * (colorsForInterpol[0] / z_coords[0]) +
+                            beta  * (colorsForInterpol[1] / z_coords[1]) +
+                            gamma * (colorsForInterpol[2] / z_coords[2])
                         ) if z_coords else (
-                            alpha * colorPerVertex[0] +
-                            beta  * colorPerVertex[1] +
-                            gamma * colorPerVertex[2]
+                            alpha * colorsForInterpol[0] +
+                            beta  * colorsForInterpol[1] +
+                            gamma * colorsForInterpol[2]
                         )
 
                         z_interpolated = 1 / (alpha / z_coords[0] + beta / z_coords[1] + gamma / z_coords[2]) if z_coords else 1
@@ -551,17 +551,17 @@ class GL:
                         p2_2d, z2 = GL.project_vertex(p2)
                         p3_2d, z3 = GL.project_vertex(p3)
 
-                        colors_for_triangle = []
+                        colors_for_interpol = []
 
                         if colorPerVertex:
                             c1 = np.array(color[colorIndex[idx1] * 3: colorIndex[idx1] * 3 + 3]) * 255
                             c2 = np.array(color[colorIndex[idx2] * 3: colorIndex[idx2] * 3 + 3]) * 255
                             c3 = np.array(color[colorIndex[idx3] * 3: colorIndex[idx3] * 3 + 3]) * 255
 
-                            colors_for_triangle = [c1, c2, c3]
+                            colors_for_interpol = [c1, c2, c3]
 
                         # Desenhar o triângulo
-                        GL.rasterize_triangle([p1_2d, p2_2d, p3_2d], emissiveColor, colorPerVertex=colors_for_triangle, z_coords=[z1, z2, z3])
+                        GL.rasterize_triangle([p1_2d, p2_2d, p3_2d], emissiveColor, colorsForInterpol=colors_for_interpol, z_coords=[z1, z2, z3])
 
                 # Limpar a lista de índices para a próxima face
                 face_indices = []
