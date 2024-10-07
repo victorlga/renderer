@@ -574,7 +574,8 @@ class GL:
                 color_indices = []
             else:
                 face_indices.append(coordIndex[i])
-                color_indices.append(colorIndex[i])
+                if colorIndex:
+                    color_indices.append(colorIndex[i])
             i += 1
 
 
