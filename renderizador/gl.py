@@ -185,7 +185,7 @@ class GL:
 
 
     @staticmethod
-    def rasterize_triangle(vertices, color, colorPerVertex=None):
+    def rasterize_triangle(vertices, color, colorPerVertex=None, z_coords=None):
         """Função que rasteriza qualquer triângulo."""
         # Calcula o bounding box do triângulo
         min_x, min_y = np.min(vertices, axis=0).astype(int)
@@ -200,16 +200,22 @@ class GL:
                     
                     if colorPerVertex:
                         alpha, beta, gamma = GL.compute_barycentric_coordinates(vertices, (x, y))
-
                         interpolated_color = (
-                            alpha * colorPerVertex[0] +   # cor do vértice 1
-                            beta * colorPerVertex[1] +    # cor do vértice 2
-                            gamma * colorPerVertex[2]     # cor do vértice 3
+                            alpha * (colorPerVertex[0] / z_coords[0]) +
+                            beta  * (colorPerVertex[1] / z_coords[1]) +
+                            gamma * (colorPerVertex[2] / z_coords[2])
+                        ) if z_coords else (
+                            alpha * colorPerVertex[0] +
+                            beta  * colorPerVertex[1] +
+                            gamma * colorPerVertex[2]
                         )
+
+                        z_interpolated = 1 / (alpha / z_coords[0] + beta / z_coords[1] + gamma / z_coords[2]) if z_coords else 1
+                        interpolated_color *= z_interpolated
 
                         # Converte a cor interpolada para inteiro
                         color = interpolated_color.astype(int)
-
+                    
                     gpu.GPU.draw_pixel([x, y], gpu.GPU.RGB8, color.tolist()) 
 
     @staticmethod
@@ -238,6 +244,7 @@ class GL:
         model_matrix = GL.transformation_stack[-1] if GL.transformation_stack else np.identity(4)
         transformed_vertex = model_matrix @ vertex_homogeneous
         projected_vertex = GL.perspective_matrix @ transformed_vertex
+        z_camera_space = projected_vertex[2]
 
         # Realizamos a divisão por w
         projected_vertex /= projected_vertex[3]
@@ -246,7 +253,7 @@ class GL:
         x = (projected_vertex[0] + 1) * 0.5 * GL.width
         y = (1 - (projected_vertex[1] + 1) * 0.5) * GL.height
 
-        return [x, y]
+        return [x, y], z_camera_space
 
     @staticmethod
     def triangleSet(point, colors):
@@ -272,12 +279,11 @@ class GL:
         points = np.array(point).reshape(num_points, 3)
         
         for i in range(0, num_points, 3):
-            p1 = GL.project_vertex(points[i])
-            p2 = GL.project_vertex(points[i+1])
-            p3 = GL.project_vertex(points[i+2])
+            p1, _ = GL.project_vertex(points[i])
+            p2, _ = GL.project_vertex(points[i+1])
+            p3, _ = GL.project_vertex(points[i+2])
             vertices = np.array(p1+p2+p3).reshape(3, 2)
 
-        
             # Utiliza a função rasterize_triangle para desenhar o triângulo
             GL.rasterize_triangle(vertices, colors)
     
@@ -430,10 +436,10 @@ class GL:
                     p1, p3 = p3, p1
                 
                 # Projeta os vértices para o espaço 2D
-                p1_2d = GL.project_vertex(np.array(p1))
-                p2_2d = GL.project_vertex(np.array(p2))
-                p3_2d = GL.project_vertex(np.array(p3))
-                
+                p1_2d, _ = GL.project_vertex(np.array(p1))
+                p2_2d, _ = GL.project_vertex(np.array(p2))
+                p3_2d, _ = GL.project_vertex(np.array(p3))
+
                 # Desenhe o triângulo
                 GL.rasterize_triangle([p1_2d, p2_2d, p3_2d], colors)
 
@@ -483,9 +489,9 @@ class GL:
                 p1, p3 = p3, p1
 
             # Projeta os vértices no espaço 2D
-            p1_2d = GL.project_vertex(np.array(p1))
-            p2_2d = GL.project_vertex(np.array(p2))
-            p3_2d = GL.project_vertex(np.array(p3))
+            p1_2d, _ = GL.project_vertex(np.array(p1))
+            p2_2d, _ = GL.project_vertex(np.array(p2))
+            p3_2d, _ = GL.project_vertex(np.array(p3))
             
             # Desenha o triângulo
             GL.rasterize_triangle([p1_2d, p2_2d, p3_2d], colors)
@@ -541,9 +547,9 @@ class GL:
                         p3 = np.array(coord[idx3 * 3:idx3 * 3 + 3])
 
                         # Aplicar transformações e projeção
-                        p1_2d = GL.project_vertex(p1)
-                        p2_2d = GL.project_vertex(p2)
-                        p3_2d = GL.project_vertex(p3)
+                        p1_2d, z1 = GL.project_vertex(p1)
+                        p2_2d, z2 = GL.project_vertex(p2)
+                        p3_2d, z3 = GL.project_vertex(p3)
 
                         colors_for_triangle = []
 
@@ -555,7 +561,7 @@ class GL:
                             colors_for_triangle = [c1, c2, c3]
 
                         # Desenhar o triângulo
-                        GL.rasterize_triangle([p1_2d, p2_2d, p3_2d], emissiveColor, colorPerVertex=colors_for_triangle)
+                        GL.rasterize_triangle([p1_2d, p2_2d, p3_2d], emissiveColor, colorPerVertex=colors_for_triangle, z_coords=[z1, z2, z3])
 
                 # Limpar a lista de índices para a próxima face
                 face_indices = []
