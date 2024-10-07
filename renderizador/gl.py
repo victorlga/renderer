@@ -524,12 +524,16 @@ class GL:
         # cor da textura conforme a posição do mapeamento. Dentro da classe GPU já está
         # implementadado um método para a leitura de imagens.
 
+        print(coordIndex)
+        print(colorIndex)
+
         # Conversão da cor emissiva
         emissiveColor = np.array(colors['emissiveColor']) * 255
         emissiveColor = emissiveColor.astype(int)
 
         i = 0
         face_indices = []
+        color_indices = []
 
         while i < len(coordIndex):
             if coordIndex[i] == -1:
@@ -546,6 +550,8 @@ class GL:
                         p2 = np.array(coord[idx2 * 3:idx2 * 3 + 3])
                         p3 = np.array(coord[idx3 * 3:idx3 * 3 + 3])
 
+                        print(p1, p2, p3)
+
                         # Aplicar transformações e projeção
                         p1_2d, z1 = GL.project_vertex(p1)
                         p2_2d, z2 = GL.project_vertex(p2)
@@ -553,10 +559,10 @@ class GL:
 
                         colors_for_interpol = []
 
-                        if colorPerVertex:
-                            c1 = np.array(color[colorIndex[idx1] * 3: colorIndex[idx1] * 3 + 3]) * 255
-                            c2 = np.array(color[colorIndex[idx2] * 3: colorIndex[idx2] * 3 + 3]) * 255
-                            c3 = np.array(color[colorIndex[idx3] * 3: colorIndex[idx3] * 3 + 3]) * 255
+                        if colorPerVertex and colorIndex:
+                            c1 = np.array(color[color_indices[0] * 3: color_indices[0] * 3 + 3]) * 255
+                            c2 = np.array(color[color_indices[j] * 3: color_indices[j] * 3 + 3]) * 255
+                            c3 = np.array(color[color_indices[j + 1] * 3: color_indices[j + 1] * 3 + 3]) * 255
 
                             colors_for_interpol = [c1, c2, c3]
 
@@ -565,8 +571,10 @@ class GL:
 
                 # Limpar a lista de índices para a próxima face
                 face_indices = []
+                color_indices = []
             else:
                 face_indices.append(coordIndex[i])
+                color_indices.append(colorIndex[i])
             i += 1
 
 
