@@ -185,7 +185,8 @@ class GL:
 
 
     @staticmethod
-    def rasterize_triangle(vertices, color, colorsForInterpol=None, z_coords=None):
+    def rasterize_triangle(vertices, colors, z_coords=None):
+        
         """Função que rasteriza qualquer triângulo."""
         # Calcula o bounding box do triângulo
         min_x, min_y = np.min(vertices, axis=0).astype(int)
@@ -198,25 +199,35 @@ class GL:
                     if not GL.is_inside(vertices, [x, y]):
                         continue
                     
-                    if colorsForInterpol:
+                    if z_coords:
                         alpha, beta, gamma = GL.compute_barycentric_coordinates(vertices, (x, y))
+
                         interpolated_color = (
-                            alpha * (colorsForInterpol[0] / z_coords[0]) +
-                            beta  * (colorsForInterpol[1] / z_coords[1]) +
-                            gamma * (colorsForInterpol[2] / z_coords[2])
-                        ) if z_coords else (
-                            alpha * colorsForInterpol[0] +
-                            beta  * colorsForInterpol[1] +
-                            gamma * colorsForInterpol[2]
+                            alpha * (colors[0] / z_coords[0][0]) +
+                            beta  * (colors[1] / z_coords[1][0]) +
+                            gamma * (colors[2] / z_coords[2][0])
                         )
 
-                        z_interpolated = 1 / (alpha / z_coords[0] + beta / z_coords[1] + gamma / z_coords[2]) if z_coords else 1
+
+                        z_interpolated = 1 / (alpha / z_coords[0][0] + beta / z_coords[1][0] + gamma / z_coords[2][0])
                         interpolated_color *= z_interpolated
 
                         # Converte a cor interpolada para inteiro
-                        color = interpolated_color.astype(int)
-                    
-                    gpu.GPU.draw_pixel([x, y], gpu.GPU.RGB8, color.tolist()) 
+                        interpolated_color = interpolated_color.astype(int)
+                        
+
+                        depht_z_interpol = 1 / (alpha / z_coords[0][1] + beta / z_coords[1][1] + gamma / z_coords[2][1])
+
+                        print("Primeiro: ", depht_z_interpol)
+                        print("Segundo: ", gpu.GPU.read_pixel([x, y], gpu.GPU.DEPTH_COMPONENT32F))
+                        print()
+                        if gpu.GPU.read_pixel([x, y], gpu.GPU.DEPTH_COMPONENT32F) > depht_z_interpol:
+
+                            gpu.GPU.draw_pixel([x, y], gpu.GPU.DEPTH_COMPONENT32F, [depht_z_interpol])
+                            gpu.GPU.draw_pixel([x, y], gpu.GPU.RGB8, interpolated_color.tolist())
+
+                    else:
+                        gpu.GPU.draw_pixel([x, y], gpu.GPU.RGB8, colors.tolist())
 
     @staticmethod
     def triangleSet2D(vertices, colors):
@@ -252,8 +263,7 @@ class GL:
         # Convertendo para coordenadas de tela
         x = (projected_vertex[0] + 1) * 0.5 * GL.width
         y = (1 - (projected_vertex[1] + 1) * 0.5) * GL.height
-
-        return [x, y], z_camera_space
+        return [x, y], [z_camera_space, projected_vertex[2]]
 
     @staticmethod
     def triangleSet(point, colors):
@@ -274,18 +284,19 @@ class GL:
         
         colors = np.array(colors['emissiveColor']) * 255  # Convertendo a cor para valores entre 0 e 255
         colors = colors.astype(int)
+        colors = [colors] * 3
 
         num_points = len(point) // 3
         points = np.array(point).reshape(num_points, 3)
         
         for i in range(0, num_points, 3):
-            p1, _ = GL.project_vertex(points[i])
-            p2, _ = GL.project_vertex(points[i+1])
-            p3, _ = GL.project_vertex(points[i+2])
+            p1, z1 = GL.project_vertex(points[i])
+            p2, z2 = GL.project_vertex(points[i+1])
+            p3, z3 = GL.project_vertex(points[i+2])
             vertices = np.array(p1+p2+p3).reshape(3, 2)
 
             # Utiliza a função rasterize_triangle para desenhar o triângulo
-            GL.rasterize_triangle(vertices, colors)
+            GL.rasterize_triangle(vertices, colors, z_coords=[z1, z2, z3])
     
     @staticmethod
     def quaternion_to_matrix(q):
@@ -419,7 +430,9 @@ class GL:
         # todos no sentido horário ou todos no sentido anti-horário, conforme especificado.
 
         colors = np.array(colors['emissiveColor']) * 255
+        
         colors = colors.astype(int)
+        colors = [colors] * 3
 
         offset = 0
 
@@ -436,12 +449,12 @@ class GL:
                     p1, p3 = p3, p1
                 
                 # Projeta os vértices para o espaço 2D
-                p1_2d, _ = GL.project_vertex(np.array(p1))
-                p2_2d, _ = GL.project_vertex(np.array(p2))
-                p3_2d, _ = GL.project_vertex(np.array(p3))
+                p1_2d, z1 = GL.project_vertex(np.array(p1))
+                p2_2d, z2 = GL.project_vertex(np.array(p2))
+                p3_2d, z3 = GL.project_vertex(np.array(p3))
 
                 # Desenhe o triângulo
-                GL.rasterize_triangle([p1_2d, p2_2d, p3_2d], colors)
+                GL.rasterize_triangle([p1_2d, p2_2d, p3_2d], colors, z_coords=[z1, z2, z3])
 
             # Atualiza o deslocamento para a próxima tira de triângulos
             offset += count
@@ -464,6 +477,7 @@ class GL:
         # Converte as cores para valores entre 0 e 255
         colors = np.array(colors['emissiveColor']) * 255
         colors = colors.astype(int)
+        colors = [colors] * 3
 
         # Precisamos percorrer a lista de índices e montar os triângulos
         i = 0  # Índice para percorrer o array de índices
@@ -489,12 +503,12 @@ class GL:
                 p1, p3 = p3, p1
 
             # Projeta os vértices no espaço 2D
-            p1_2d, _ = GL.project_vertex(np.array(p1))
-            p2_2d, _ = GL.project_vertex(np.array(p2))
-            p3_2d, _ = GL.project_vertex(np.array(p3))
+            p1_2d, z1 = GL.project_vertex(np.array(p1))
+            p2_2d, z2 = GL.project_vertex(np.array(p2))
+            p3_2d, z3 = GL.project_vertex(np.array(p3))
             
             # Desenha o triângulo
-            GL.rasterize_triangle([p1_2d, p2_2d, p3_2d], colors)
+            GL.rasterize_triangle([p1_2d, p2_2d, p3_2d], colors, z_coords=[z1, z2, z3])
 
             # Incrementa o índice para a próxima sequência
             i += 1
@@ -524,9 +538,6 @@ class GL:
         # cor da textura conforme a posição do mapeamento. Dentro da classe GPU já está
         # implementadado um método para a leitura de imagens.
 
-        print(coordIndex)
-        print(colorIndex)
-
         # Conversão da cor emissiva
         emissiveColor = np.array(colors['emissiveColor']) * 255
         emissiveColor = emissiveColor.astype(int)
@@ -550,14 +561,12 @@ class GL:
                         p2 = np.array(coord[idx2 * 3:idx2 * 3 + 3])
                         p3 = np.array(coord[idx3 * 3:idx3 * 3 + 3])
 
-                        print(p1, p2, p3)
-
                         # Aplicar transformações e projeção
                         p1_2d, z1 = GL.project_vertex(p1)
                         p2_2d, z2 = GL.project_vertex(p2)
                         p3_2d, z3 = GL.project_vertex(p3)
 
-                        colors_for_interpol = []
+                        colors_for_interpol = [emissiveColor, emissiveColor, emissiveColor]
 
                         if colorPerVertex and colorIndex:
                             c1 = np.array(color[color_indices[0] * 3: color_indices[0] * 3 + 3]) * 255
@@ -567,7 +576,7 @@ class GL:
                             colors_for_interpol = [c1, c2, c3]
 
                         # Desenhar o triângulo
-                        GL.rasterize_triangle([p1_2d, p2_2d, p3_2d], emissiveColor, colorsForInterpol=colors_for_interpol, z_coords=[z1, z2, z3])
+                        GL.rasterize_triangle([p1_2d, p2_2d, p3_2d], colors_for_interpol, z_coords=[z1, z2, z3])
 
                 # Limpar a lista de índices para a próxima face
                 face_indices = []
