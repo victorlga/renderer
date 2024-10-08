@@ -202,13 +202,11 @@ class GL:
                     if z_coords:
                         alpha, beta, gamma = GL.compute_barycentric_coordinates(vertices, (x, y))
 
-
                         interpolated_color = (
                             alpha * (colors[0] / z_coords[0][0]) +
                             beta  * (colors[1] / z_coords[1][0]) +
                             gamma * (colors[2] / z_coords[2][0])
                         )
-
 
                         z_interpolated = 1 / (alpha / z_coords[0][0] + beta / z_coords[1][0] + gamma / z_coords[2][0])
                         interpolated_color *= z_interpolated
@@ -217,16 +215,38 @@ class GL:
                         interpolated_color = interpolated_color.astype(int)
 
                         if (not texture is None):
-                            texture_height, texture_width, _ = texture.shape
                             u1, u2, u3 = uv[0]
                             v1, v2, v3 = uv[1]
-                            u_interpolated = (alpha * u1 + beta * u2 + gamma * u3)
-                            v_interpolated = 1 - (alpha * v1 + beta * v2 + gamma * v3)
 
-                            tex_x = int(u_interpolated * texture_width)
-                            tex_y = int(v_interpolated * texture_height)
-                            interpolated_color = texture[tex_y, tex_x][:3]
-                            transparency = -(texture[tex_y, tex_x][3] - 255) / 255
+                            u00 = (alpha * u1 + beta * u2 + gamma * u3)
+                            v00 = 1 - (alpha * v1 + beta * v2 + gamma * v3)
+
+                            alpha10, beta10, gamma10 = GL.compute_barycentric_coordinates(vertices, (x + 1, y))
+                            u10 = (alpha10 * u1 + beta10 * u2 + gamma10 * u3)
+                            v10 = 1 - (alpha10 * v1 + beta10 * v2 + gamma10 * v3)
+
+                            alpha01, beta01, gamma01 = GL.compute_barycentric_coordinates(vertices, (x, y + 1))
+                            u01 = (alpha01 * u1 + beta01 * u2 + gamma01 * u3)
+                            v01 = 1 - (alpha01 * v1 + beta01 * v2 + gamma01 * v3)
+
+                            du_dx = (u10 - u00) #* texture[0].shape[0]
+                            dv_dx = (v10 - v00) #* texture[0].shape[0]
+                            du_dy = (u01 - u00) #* texture[0].shape[1]
+                            dv_dy = (v01 - v00) #* texture[0].shape[1]
+
+                            L = np.max([
+                                np.sqrt(du_dx**2 + dv_dx**2),
+                                np.sqrt(du_dy**2 + dv_dy**2),
+                                1e-6
+                            ])
+
+                            D = max(round(np.log2(L)), 0)
+
+                            texture_height, texture_width, _ = texture[D].shape
+                            tex_x = int(u00 * texture_height)
+                            tex_y = int(v00 * texture_width)
+                            interpolated_color = texture[D][tex_y, tex_x][:3]
+                            transparency = -(texture[D][tex_y, tex_x][3] - 255) / 255
 
                         new_depht = 1 / (alpha / z_coords[0][1] + beta / z_coords[1][1] + gamma / z_coords[2][1])
                         if gpu.GPU.read_pixel([x, y], gpu.GPU.DEPTH_COMPONENT32F) > new_depht:
@@ -527,6 +547,19 @@ class GL:
             i += 1
 
     @staticmethod
+    def generate_mipmaps(texture):
+        import cv2
+
+        mipmaps = [texture]  # Nível 0
+        current_texture = texture.copy()
+        
+        while current_texture.shape[0] > 1 and current_texture.shape[1] > 1:
+            current_texture = cv2.pyrDown(current_texture)
+            mipmaps.append(current_texture)
+        
+        return mipmaps
+
+    @staticmethod
     def indexedFaceSet(coord, coordIndex, colorPerVertex, color, colorIndex,
                        texCoord, texCoordIndex, colors, current_texture):
         """Função usada para renderizar IndexedFaceSet."""
@@ -554,6 +587,7 @@ class GL:
         texture = None
         if current_texture:
             texture = gpu.GPU.load_texture(current_texture[0])
+            texture = GL.generate_mipmaps(texture)
 
         # Conversão da cor emissiva
         emissiveColor = np.array(colors['emissiveColor']) * 255
