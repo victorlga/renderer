@@ -214,7 +214,7 @@ class GL:
                         # Converte a cor interpolada para inteiro
                         interpolated_color = interpolated_color.astype(int)
 
-                        if (not texture is None):
+                        if (texture is not None):
                             u1, u2, u3 = uv[0]
                             v1, v2, v3 = uv[1]
 
@@ -229,10 +229,10 @@ class GL:
                             u01 = (alpha01 * u1 + beta01 * u2 + gamma01 * u3)
                             v01 = 1 - (alpha01 * v1 + beta01 * v2 + gamma01 * v3)
 
-                            du_dx = (u10 - u00) #* texture[0].shape[0]
-                            dv_dx = (v10 - v00) #* texture[0].shape[0]
-                            du_dy = (u01 - u00) #* texture[0].shape[1]
-                            dv_dy = (v01 - v00) #* texture[0].shape[1]
+                            du_dx = (u10 - u00)
+                            dv_dx = (v10 - v00)
+                            du_dy = (u01 - u00)
+                            dv_dy = (v01 - v00)
 
                             L = np.max([
                                 np.sqrt(du_dx**2 + dv_dx**2),
