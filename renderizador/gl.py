@@ -278,7 +278,7 @@ class GL:
         vertices = np.array(vertices).reshape(3, 2) * 2
 
         GL.rasterize_triangle(vertices, colors)
-    
+
     @staticmethod
     def project_vertex(vertex):
         """Aplica a transformação e projeção a um vértice."""
@@ -626,7 +626,7 @@ class GL:
                             c3 = np.array(color[color_indices[j + 1] * 3: color_indices[j + 1] * 3 + 3]) * 255
 
                             colors_for_interpol = [c1, c2, c3]
-                        
+
                         uv = []
                         if current_texture:
                             u = [texCoord[tex_indices[j + 1] * 2], texCoord[tex_indices[j] * 2], texCoord[tex_indices[0] * 2]]
