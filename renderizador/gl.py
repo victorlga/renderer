@@ -677,9 +677,46 @@ class GL:
         # precisar tesselar ela em triângulos, para isso encontre os vértices e defina
         # os triângulos.
 
-        # O print abaixo é só para vocês verificarem o funcionamento, DEVE SER REMOVIDO.
-        print("Sphere : radius = {0}".format(radius)) # imprime no terminal o raio da esfera
-        print("Sphere : colors = {0}".format(colors)) # imprime no terminal as cores
+        stacks = 20  # Number of horizontal divisions (latitude)
+        slices = 20  # Number of vertical divisions (longitude)
+
+        coords = []
+        coordsIndex = []
+        
+        # Loop over the latitude (phi) and longitude (theta)
+        for i in range(stacks + 1):
+            phi = i * np.pi / stacks  # From 0 to pi (latitude)
+            for j in range(slices + 1):
+                theta = j * 2 * np.pi / slices  # From 0 to 2pi (longitude)
+                
+                # Convert spherical coordinates to Cartesian coordinates
+                x = radius * np.sin(phi) * np.cos(theta)
+                y = radius * np.sin(phi) * np.sin(theta)
+                z = radius * np.cos(phi)
+                
+                # Add the vertex to the list
+                coords.extend([x, y, z])
+
+        # Create the indices for the triangle faces
+        for i in range(stacks):
+            for j in range(slices):
+                # Get the indices of the vertices for the two triangles forming each rectangular patch
+                index1 = i * (slices + 1) + j
+                index2 = index1 + slices + 1
+                index3 = index1 + 1
+                index4 = index2 + 1
+
+                # Define the two triangles for this rectangle
+                coordsIndex.extend([index1, index2, index3, -1])  # First triangle
+                coordsIndex.extend([index3, index2, index4, -1])  # Second triangle
+
+        GL.indexedFaceSet(
+            coords,
+            coordsIndex,
+            None, None, None, None, None,
+            colors,
+            None
+        )
 
     @staticmethod
     def cone(bottomRadius, height, colors):
