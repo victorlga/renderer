@@ -229,4 +229,4 @@ class Interface:
             time_box = TextBox(time_box_pos, 'FPS ', initial="0.0")
             _ = animation.FuncAnimation(self.fig, animate, interval=1, blit=False)
 
-        plt.savefig('output.png')
+        plt.show('output.png')
