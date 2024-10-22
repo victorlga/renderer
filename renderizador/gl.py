@@ -23,6 +23,7 @@ class GL:
     height = 600  # altura da tela
     near = 0.01   # plano de corte próximo
     far = 1000    # plano de corte distante
+    dirLight = []
 
     @staticmethod
     def setup(width, height, near=0.01, far=1000):
@@ -65,9 +66,6 @@ class GL:
         # vira uma quantidade par de valores.
         # O parâmetro colors é um dicionário com os tipos cores possíveis, para o Polyline2D
         # você pode assumir inicialmente o desenho das linhas com a cor emissiva (emissiveColor).
-
-        print("Polyline2D : lineSegments = {0}".format(lineSegments)) # imprime no terminal
-        print("Polyline2D : colors = {0}".format(colors)) # imprime no terminal as cores
         
         x0, y0, x1, y1 = map(int, lineSegments)  # Convertendo as coordenadas para inteiros
         color = list(map(lambda x: round(x * 255), colors['emissiveColor']))  # Convertendo a cor para valores entre 0 e 255
@@ -136,7 +134,6 @@ class GL:
     
     @staticmethod
     def is_inside(vertices, point):
-        # Utiliza numpy para cálculos vetorizados do produto vetorial
         x0, y0, x1, y1, x2, y2 = np.array(vertices).flatten()
 
         v0 = np.array([x2 - x0, y2 - y0])
@@ -150,6 +147,7 @@ class GL:
         dot12 = np.dot(v1, v2)
 
         invDenom = 1 / (dot00 * dot11 - dot01 * dot01)
+
         u = (dot11 * dot02 - dot01 * dot12) * invDenom
         v = (dot00 * dot12 - dot01 * dot02) * invDenom
 
@@ -186,8 +184,8 @@ class GL:
 
     @staticmethod
     def rasterize_triangle(vertices, colors, z_coords=None, transparency=None, texture=None, uv=None):
-        
         """Função que rasteriza qualquer triângulo."""
+
         # Calcula o bounding box do triângulo
         min_x, min_y = np.min(vertices, axis=0).astype(int)
         max_x, max_y = np.max(vertices, axis=0).astype(int)
@@ -248,14 +246,13 @@ class GL:
                             interpolated_color = texture[D][tex_y, tex_x][:3]
                             transparency = -(texture[D][tex_y, tex_x][3] - 255) / 255
 
-                        new_depht = 1 / (alpha / z_coords[0][1] + beta / z_coords[1][1] + gamma / z_coords[2][1])
+                        new_depht = 1 / (alpha / z_coords[0][1] + beta / z_coords[1][1] + gamma / z_coords[2][1]) - 0.001
                         if gpu.GPU.read_pixel([x, y], gpu.GPU.DEPTH_COMPONENT32F) > new_depht:
                             gpu.GPU.draw_pixel([x, y], gpu.GPU.DEPTH_COMPONENT32F, [new_depht])
                             if transparency:
                                 current_color = gpu.GPU.read_pixel([x, y], gpu.GPU.RGB8) * transparency
                                 new_color = interpolated_color * (1 - transparency)
                                 interpolated_color = current_color + new_color
-                                
                             gpu.GPU.draw_pixel([x, y], gpu.GPU.RGB8, interpolated_color.tolist())
 
                     else:
@@ -298,6 +295,63 @@ class GL:
         return [x, y], [z_camera_space, projected_vertex[2]]
 
     @staticmethod
+    def compute_color(colors, p1, p2, p3):
+
+        # Calcula o vetor de visão normalizado
+        camera_position = np.array([0, 0, 1])
+        triangle_center = (p1 + p2 + p3) / 3
+        view_vector = camera_position - triangle_center
+        normalized_view_vector = view_vector / np.linalg.norm(view_vector)
+
+        # Calcula a normal normalizada da face
+        v1 = p2 - p1
+        v2 = p3 - p1
+        normal = np.cross(v2, v1)
+        normalized_normal = normal / np.linalg.norm(normal)
+
+        emissiveColor = np.array(colors['emissiveColor']) * 255
+        emissiveColor = emissiveColor.astype(int)
+
+        diffuseColor = np.array(colors['diffuseColor']) * 255
+        diffuseColor = diffuseColor.astype(int)
+
+        specularColor = np.array(colors['specularColor']) * 255
+        specularColor = specularColor.astype(int)
+
+        shininess = colors['shininess']
+
+        final_color = emissiveColor.astype(float)
+
+        for light in GL.dirLight:
+            light_ambient_intensity = light['ambientIntensity']
+            light_color = light['color']
+            light_intensity = light['intensity']
+
+            # Normalizando a direção da luz
+            light_direction = np.array(light['direction'])
+            light_direction = light_direction / np.linalg.norm(light_direction)
+
+            # Iluminação ambiente
+            ambient = light_ambient_intensity * diffuseColor
+
+            # Iluminação difusa (coeficiente é o máximo entre 0 e o produto escalar)
+            diffuse = light_intensity * diffuseColor * max(np.dot(normalized_normal, light_direction), 0.0)
+
+            # Cálculo do vetor "halfway" para a iluminação especular
+            halfway_vector = (light_direction + normalized_view_vector) / np.linalg.norm(light_direction + normalized_view_vector)
+            specular_intensity = np.dot(normalized_normal, halfway_vector)
+
+            # Iluminação especular (somente se a normal estiver virada para a luz)
+            print("(shininess * 128): ", (shininess * 128))
+            specular = light_intensity * specularColor * (specular_intensity ** (shininess * 128))
+
+            # Adiciona o efeito da luz no cálculo final da cor
+            final_color += light_color * (ambient + diffuse + specular)
+
+        return final_color.astype(int)  # Para garantir que o valor da cor fique no intervalo correto
+
+
+    @staticmethod
     def triangleSet(point, colors):
         """Função usada para renderizar TriangleSet."""
         # https://www.web3d.org/specifications/X3Dv4/ISO-IEC19775-1v4-IS/Part01/components/rendering.html#TriangleSet
@@ -314,23 +368,28 @@ class GL:
         # (emissiveColor), conforme implementar novos materias você deverá suportar outros
         # tipos de cores.
         
-        emissiveColor = np.array(colors['emissiveColor']) * 255  # Convertendo a cor para valores entre 0 e 255
-        emissiveColor = emissiveColor.astype(int)
-        emissiveColor = [emissiveColor] * 3
         transparency = colors['transparency']
 
         num_points = len(point) // 3
         points = np.array(point).reshape(num_points, 3)
-        
+
         for i in range(0, num_points, 3):
+
+            final_color = GL.compute_color(
+                colors,
+                points[i],
+                points[i+1],
+                points[i+2]
+            )
+            final_color = [final_color] * 3
             p1, z1 = GL.project_vertex(points[i])
             p2, z2 = GL.project_vertex(points[i+1])
             p3, z3 = GL.project_vertex(points[i+2])
             vertices = np.array(p1+p2+p3).reshape(3, 2)
 
             # Utiliza a função rasterize_triangle para desenhar o triângulo
-            GL.rasterize_triangle(vertices, emissiveColor, z_coords=[z1, z2, z3], transparency=transparency)
-    
+            GL.rasterize_triangle(vertices, final_color, z_coords=[z1, z2, z3], transparency=transparency)
+
     @staticmethod
     def quaternion_to_matrix(q):
         """Converte um quaternion em uma matriz de rotação 4x4."""
@@ -589,10 +648,6 @@ class GL:
             texture = gpu.GPU.load_texture(current_texture[0])
             texture = GL.generate_mipmaps(texture)
 
-        # Conversão da cor emissiva
-        emissiveColor = np.array(colors['emissiveColor']) * 255
-        emissiveColor = emissiveColor.astype(int)
-
         i = 0
         face_indices = []
         color_indices = []
@@ -618,7 +673,9 @@ class GL:
                         p2_2d, z2 = GL.project_vertex(p2)
                         p3_2d, z3 = GL.project_vertex(p3)
 
-                        colors_for_interpol = [emissiveColor, emissiveColor, emissiveColor]
+                        final_light = GL.compute_color(colors, p1, p2, p3)
+
+                        colors_for_interpol = [final_light, final_light, final_light]
 
                         if colorPerVertex and colorIndex:
                             c1 = np.array(color[color_indices[0] * 3: color_indices[0] * 3 + 3]) * 255
@@ -660,12 +717,43 @@ class GL:
         # essa caixa você vai provavelmente querer tesselar ela em triângulos, para isso
         # encontre os vértices e defina os triângulos.
 
-        # O print abaixo é só para vocês verificarem o funcionamento, DEVE SER REMOVIDO.
-        print("Box : size = {0}".format(size)) # imprime no terminal pontos
-        print("Box : colors = {0}".format(colors)) # imprime no terminal as cores
 
-        # Exemplo de desenho de um pixel branco na coordenada 10, 10
-        gpu.GPU.draw_pixel([10, 10], gpu.GPU.RGB8, [255, 255, 255])  # altera pixel
+        half_width, half_height, half_depth = np.array(size) / 2
+
+        v0 = [-half_width, half_height, -half_depth]
+        v1 = [-half_width, half_height, half_depth]
+        v2 = [half_width, half_height, half_depth]
+        v3 = [half_width, half_height, -half_depth]
+        v4 = [-half_width, -half_height, -half_depth]
+        v5 = [-half_width, -half_height, half_depth]
+        v6 = [half_width, -half_height, half_depth]
+        v7 = [half_width, -half_height, -half_depth]
+
+        coords = [ *v0, *v1, *v2, *v3, *v4, *v5, *v6, *v7 ]
+
+        coordsIndex = [
+            0, 1, 3, -1,
+            1, 2, 3, -1,
+            0, 4, 1, -1,
+            4, 5, 1, -1,
+            1, 5, 2, -1,
+            5, 6, 2, -1,
+            2, 6, 3, -1,
+            6, 7, 3, -1,
+            3, 7, 0, -1,
+            7, 4, 0, -1,
+            4, 7, 5, -1,
+            7, 6, 5, -1,
+        ]
+
+        GL.indexedFaceSet(
+            coords,
+            coordsIndex,
+            None, None, None, None, None,
+            colors,
+            None
+        )
+
 
     @staticmethod
     def sphere(radius, colors):
@@ -866,12 +954,7 @@ class GL:
         # Possui os campos básicos ambientIntensity, cor, intensidade. Um nó PointLight ilumina
         # a geometria em um raio de sua localização. O campo do raio deve ser maior ou igual a
         # zero. A iluminação do nó PointLight diminui com a distância especificada.
-
-        # O print abaixo é só para vocês verificarem o funcionamento, DEVE SER REMOVIDO.
-        print("PointLight : ambientIntensity = {0}".format(ambientIntensity))
-        print("PointLight : color = {0}".format(color)) # imprime no terminal
-        print("PointLight : intensity = {0}".format(intensity)) # imprime no terminal
-        print("PointLight : location = {0}".format(location)) # imprime no terminal
+        pass
 
     @staticmethod
     def fog(visibilityRange, color):
@@ -885,9 +968,7 @@ class GL:
         # desenhados com uma cor de cor constante. Objetos muito próximos do visualizador
         # são muito pouco misturados com a cor do nevoeiro.
 
-        # O print abaixo é só para vocês verificarem o funcionamento, DEVE SER REMOVIDO.
-        print("Fog : color = {0}".format(color)) # imprime no terminal
-        print("Fog : visibilityRange = {0}".format(visibilityRange))
+        pass
 
     @staticmethod
     def timeSensor(cycleInterval, loop):
