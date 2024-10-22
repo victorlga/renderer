@@ -729,10 +729,40 @@ class GL:
         # Para desenha esse cone você vai precisar tesselar ele em triângulos, para isso
         # encontre os vértices e defina os triângulos.
 
-        # O print abaixo é só para vocês verificarem o funcionamento, DEVE SER REMOVIDO.
-        print("Cone : bottomRadius = {0}".format(bottomRadius)) # imprime no terminal o raio da base do cone
-        print("Cone : height = {0}".format(height)) # imprime no terminal a altura do cone
-        print("Cone : colors = {0}".format(colors)) # imprime no terminal as cores
+        slices = 20
+
+        coords = []
+        coordsIndex = []
+        
+        for i in range(slices):
+            theta = i * 2 * np.pi / slices
+            
+            x = bottomRadius * np.cos(theta)
+            z = bottomRadius * np.sin(theta)
+            coords.extend([x, -height/2, z])
+
+        apex = [0, height/2, 0]
+        coords.extend(apex)
+        apexIndex = len(coords) // 3 - 1
+        
+        for i in range(slices):
+            nextIndex = (i + 1) % slices
+            coordsIndex.extend([i, nextIndex, apexIndex, -1])
+
+        baseCenterIndex = len(coords) // 3
+        coords.extend([0, -height/2, 0])
+        
+        for i in range(slices):
+            nextIndex = (i + 1) % slices
+            coordsIndex.extend([baseCenterIndex, i, nextIndex, -1])
+
+        GL.indexedFaceSet(
+            coords,
+            coordsIndex,
+            None, None, None, None, None,
+            colors,
+            None
+        )
 
     @staticmethod
     def cylinder(radius, height, colors):
