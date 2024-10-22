@@ -147,7 +147,7 @@ class GPU:
                         # Grava dados no Framebuffer
                         GPU.frame_buffer[GPU.draw_framebuffer].color[coord[1]][coord[0]] = data
                     else:
-                        raise Exception(f"Valores do Frame buffer devem estar em um vetor de dimensão [{mode+2}] ser inteiros e estar entre 0 e 255")
+                        raise Exception(f"Valores do Frame buffer devem estar em um vetor de dimensão [{mode+2}] ser inteiros e estar entre 0 e 255. Data: {data}")
                 else:
                     raise Exception(f"Frame buffer {GPU.draw_framebuffer} não alocado com o canal de cor")
 
