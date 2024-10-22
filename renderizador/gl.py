@@ -772,13 +772,61 @@ class GL:
         # (0, 0, 0) no sistema de coordenadas local. O argumento radius especifica o
         # raio da base do cilindro e o argumento height especifica a altura do cilindro.
         # O cilindro é alinhado com o eixo Y local. O cilindro é fechado por padrão em ambas as extremidades.
-        # Para desenha esse cilindro você vai precisar tesselar ele em triângulos, para isso
+        # Para desenhar esse cilindro você vai precisar tesselar ele em triângulos, para isso
         # encontre os vértices e defina os triângulos.
 
-        # O print abaixo é só para vocês verificarem o funcionamento, DEVE SER REMOVIDO.
-        print("Cylinder : radius = {0}".format(radius)) # imprime no terminal o raio do cilindro
-        print("Cylinder : height = {0}".format(height)) # imprime no terminal a altura do cilindro
-        print("Cylinder : colors = {0}".format(colors)) # imprime no terminal as cores
+        slices = 20
+
+        coords = []
+        coordsIndex = []
+        
+        for i in range(slices):
+            theta = i * 2 * np.pi / slices
+
+            x = radius * np.cos(theta)
+            z = radius * np.sin(theta)
+            coords.extend([x, -height/2, z])
+        
+        for i in range(slices):
+            theta = i * 2 * np.pi / slices
+
+            x = radius * np.cos(theta)
+            z = radius * np.sin(theta)
+            coords.extend([x, height/2, z])
+        
+        for i in range(slices):
+            nextIndex = (i + 1) % slices
+            
+            bottomIndex1 = i
+            bottomIndex2 = nextIndex
+            topIndex1 = i + slices
+            topIndex2 = nextIndex + slices
+            
+            coordsIndex.extend([bottomIndex1, topIndex1, bottomIndex2, -1])
+            coordsIndex.extend([topIndex1, topIndex2, bottomIndex2, -1])
+
+        bottomCenterIndex = len(coords) // 3
+        coords.extend([0, -height/2, 0])
+        
+        for i in range(slices):
+            nextIndex = (i + 1) % slices
+            coordsIndex.extend([bottomCenterIndex, i, nextIndex, -1])
+
+        topCenterIndex = len(coords) // 3
+        coords.extend([0, height/2, 0])
+        
+        for i in range(slices):
+            nextIndex = (i + 1) % slices
+            coordsIndex.extend([topCenterIndex, i + slices, nextIndex + slices, -1])
+
+        GL.indexedFaceSet(
+            coords,
+            coordsIndex,
+            None, None, None, None, None,
+            colors,
+            None
+        )
+
 
     @staticmethod
     def navigationInfo(headlight):
